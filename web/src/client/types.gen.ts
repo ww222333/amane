@@ -601,7 +601,7 @@ export type ContentRouteEntry = {
 /**
  * ContentType
  */
-export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai';
+export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai' | 'unknown';
 
 /**
  * CropPosterRequest
@@ -1338,6 +1338,22 @@ export type LibraryCreateRequest = {
      */
     write_nfo?: boolean;
     /**
+     * Trash Empty Source
+     */
+    trash_empty_source?: boolean;
+    /**
+     * Fail Dir
+     */
+    fail_dir?: string;
+    /**
+     * Move To Fail Dir
+     */
+    move_to_fail_dir?: boolean;
+    /**
+     * Exclude Fail Dir
+     */
+    exclude_fail_dir?: boolean;
+    /**
      * Copy Resources
      */
     copy_resources?: Array<DownloadableResource>;
@@ -1457,6 +1473,22 @@ export type LibraryResponse = {
      */
     write_nfo: boolean;
     /**
+     * Trash Empty Source
+     */
+    trash_empty_source: boolean;
+    /**
+     * Fail Dir
+     */
+    fail_dir: string;
+    /**
+     * Move To Fail Dir
+     */
+    move_to_fail_dir: boolean;
+    /**
+     * Exclude Fail Dir
+     */
+    exclude_fail_dir: boolean;
+    /**
      * Copy Resources
      */
     copy_resources: Array<DownloadableResource>;
@@ -1550,6 +1582,22 @@ export type LibraryUpdateRequest = {
      * Write Nfo
      */
     write_nfo?: boolean | null;
+    /**
+     * Trash Empty Source
+     */
+    trash_empty_source?: boolean | null;
+    /**
+     * Fail Dir
+     */
+    fail_dir?: string | null;
+    /**
+     * Move To Fail Dir
+     */
+    move_to_fail_dir?: boolean | null;
+    /**
+     * Exclude Fail Dir
+     */
+    exclude_fail_dir?: boolean | null;
     /**
      * Copy Resources
      */
@@ -2242,6 +2290,18 @@ export type OrganizeSubmission = {
      * 覆盖 Library.copy_resources; None 沿用库设置
      */
     copy_resources?: Array<DownloadableResource> | null;
+    /**
+     * Trash Empty Source
+     *
+     * 覆盖 Library.trash_empty_source; None 沿用库设置. 为真且移动成功后源目录无视频则整目录入 .amane_trash
+     */
+    trash_empty_source?: boolean | null;
+    /**
+     * Move To Fail Dir
+     *
+     * 覆盖 Library.move_to_fail_dir; None 沿用库设置. 为真且库 fail_dir 非空时, 无 Metadata 的正片整夹移入失败目录
+     */
+    move_to_fail_dir?: boolean | null;
     /**
      * Media File Ids
      *

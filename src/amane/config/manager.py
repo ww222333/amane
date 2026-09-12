@@ -91,6 +91,7 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
         SiteName.DMM,
         SiteName.JAVDB,
     ],
+    ContentType.UNKNOWN: [],
 }
 
 

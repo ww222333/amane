@@ -346,7 +346,8 @@
           "western": "欧美",
           "fc2": "FC2",
           "amateur": "素人",
-          "hentai": "里番"
+          "hentai": "里番",
+          "unknown": "未知"
         },
         "$": {
           "sites": {

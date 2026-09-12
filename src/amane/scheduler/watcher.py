@@ -198,10 +198,11 @@ class FileWatcher:
         patterns: list[str] | None = None,
         skip_patterns: Sequence[str | None] | None = None,
         min_file_size: int = 0,
+        fail_dir: str = "",
     ) -> None:
         """登记监控目录.
 
-        skip_patterns 命中则不登记; `.amane_trash` 内路径恒忽略.
+        skip_patterns 命中则不登记; `.amane_trash` 与排除中的失败目录内路径忽略.
         min_file_size 只对 media_extensions 判定, `.strm` 指针不参与.
         """
         handler = _Handler(
@@ -211,6 +212,7 @@ class FileWatcher:
                 blacklist_patterns=[p for p in skip_patterns if p] if skip_patterns else None,
                 min_file_size=min_file_size,
                 media_extensions=self._media_extensions,
+                fail_dir=fail_dir,
             ),
             debounce_seconds=self._debounce_seconds,
         )

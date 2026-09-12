@@ -172,6 +172,14 @@
         "label": "写入 NFO",
         "description": "覆盖媒体库设置"
       },
+      "trash_empty_source": {
+        "label": "移走无视频源目录",
+        "description": "覆盖媒体库设置; 移动成功后源目录递归无视频则整目录进入 .amane_trash"
+      },
+      "move_to_fail_dir": {
+        "label": "移入失败目录",
+        "description": "覆盖媒体库设置; 无 Metadata 的正片整夹移入库设置的失败目录"
+      },
       "copy_resources": {
         "label": "整理时复制",
         "description": "覆盖媒体库设置",
@@ -227,7 +235,8 @@
           "western": "欧美",
           "fc2": "FC2",
           "amateur": "素人",
-          "hentai": "动漫"
+          "hentai": "动漫",
+          "unknown": "未知"
         }
       },
       "use_cache": {

@@ -52,7 +52,8 @@
       "western": "Western",
       "fc2": "FC2",
       "amateur": "Amateur",
-      "hentai": "Hentai"
+      "hentai": "Hentai",
+      "unknown": "Unknown"
     }
   },
   "batch": {
@@ -112,6 +113,15 @@
   "fieldSubtitleExtensionsHint": "Comma-separated",
   "fieldMoveMode": "File Operation Mode",
   "fieldWriteNfo": "Write NFO",
+  "fieldTrashEmptySource": "Trash empty source folders on organize",
+  "fieldTrashEmptySourceHint": "Only after a successful move; skip if any video remains under the folder; moves the whole folder into .amane_trash",
+  "fieldFailDir": "Failure directory",
+  "fieldFailDirHint": "Single folder name under the library root; organize can move whole folders without metadata here. Leave empty to disable",
+  "fieldFailDirPlaceholder": "e.g. _failed",
+  "fieldMoveToFailDir": "Move to failure directory on organize",
+  "fieldMoveToFailDirHint": "Move whole parent folders of videos without metadata into the failure directory; requires a name above",
+  "fieldExcludeFailDir": "Exclude failure directory",
+  "fieldExcludeFailDirHint": "Skip this directory in scan, watch, and organize prune so scrape will not re-queue it",
   "fieldCopyResources": "Copy on organize",
   "fieldCopyResourcesHint": "",
   "copyResource": {

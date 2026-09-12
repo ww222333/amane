@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from ..config import HotSettings
-from ..library import MEDIA_EXTENSIONS, TRASH_DIRNAME, LibraryFileKind, LibraryScan
+from ..library import MEDIA_EXTENSIONS, TRASH_DIRNAME, LibraryFileKind, LibraryScan, fail_dir_for_scan
 from ..organize import MoveMode, execute_organize
 from ..organize.file import OrganizeResult as DiskOrganizeResult
 from ..utils.threads import in_thread, path_is_dir
@@ -69,6 +69,7 @@ class TrashHandler(TaskHandler[TrashPayload, TrashResult]):
             blacklist_patterns=library.blacklist_patterns,
             min_file_size=library.min_file_size,
             media_extensions=media_extensions,
+            fail_dir=fail_dir_for_scan(fail_dir=library.fail_dir, exclude_fail_dir=library.exclude_fail_dir),
         )
         to_trash = [
             hit.path

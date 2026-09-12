@@ -84,7 +84,7 @@ Authorization = "Bearer <Amane API Token>"
 | `{ext}` | 正在放置的文件扩展名 | `mp4` / `srt` |
 | `{cd?}` | CD/分集编号 | `1` / `2` / 空 |
 | `{sub?}` | 中字标记 | `C` / 空 |
-| `{content_type}` | 内容类型 | `censored` / `uncensored` / `chinese` / `western` / `fc2` / `amateur` / `hentai` |
+| `{content_type}` | 内容类型 | `censored` / `uncensored` / `chinese` / `western` / `fc2` / `amateur` / `hentai` / `unknown` |
 | `{mosaic?}` | 马赛克标记 | `censored` / `uncensored` / `cracked` / `leaked` / 空 |
 | `{def?}` | 分辨率标记 | `4K` / `1080p` / `HD` / 空 |
 | `{raw_name}` | 源视频文件名 | `A/B.mp4` → `B` |
@@ -276,6 +276,8 @@ Amane 支持自动识别分集文件名, 目前支持以下几种常见标记:
 - 库页面的整理会依次入队回收任务 (黑名单与过小视频移入 `.amane_trash`) 与整理任务; 二者同库串行, 整理跳过规则命中行
 - 文件表勾选后的批量整理只整理所选的单条索引行, 不是以目录为单位, 也不回收
 - 整理时会自动下载缺失的资源 (如海报)
+- 库设置「整理时移走无视频源目录」默认关闭; 开启且放置方式为移动时, 视频离开后若源目录递归已无视频, 整目录移入 `.amane_trash`. 提交整理任务时可覆盖该开关.
+- 库设置可手填「失败目录」(库根下单层目录名). 开启「整理时移入失败目录」后, 整理遇到无 Metadata 的正片会整夹移入该目录; 「排除失败目录」开启时扫描 / 监控 / 整理剪枝跳过该目录. 整理任务可覆盖是否移入, 不可改目录名.
 
 ## 多库支持
 

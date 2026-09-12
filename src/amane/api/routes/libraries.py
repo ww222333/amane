@@ -68,6 +68,10 @@ async def create_library(req: LibraryCreateRequest, repo: RepoDep, runtime: Runt
             subtitle_template=req.subtitle_template,
             subtitle_extensions=req.subtitle_extensions,
             write_nfo=req.write_nfo,
+            trash_empty_source=req.trash_empty_source,
+            fail_dir=req.fail_dir,
+            move_to_fail_dir=req.move_to_fail_dir,
+            exclude_fail_dir=req.exclude_fail_dir,
             copy_resources=req.copy_resources,
             trailer_pattern=req.trailer_pattern,
             blacklist_patterns=req.blacklist_patterns,
@@ -147,6 +151,8 @@ async def update_library(
         "trailer_pattern",
         "blacklist_patterns",
         "min_file_size",
+        "fail_dir",
+        "exclude_fail_dir",
     }
     if runtime.watcher_service and watch_fields & updates.keys():
         runtime.watcher_service.sync_library(lib)

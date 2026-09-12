@@ -14,7 +14,7 @@ from ..enums import LibraryAutomation, LibraryIngest
 from ..events import EventBus, EventType
 from ..handlers._common import register_media_file, scan_library
 from ..handlers.models import ScrapePayload
-from ..library import LibraryFileKind, LibraryScan
+from ..library import LibraryFileKind, LibraryScan, fail_dir_for_scan
 from ..parsing import parse_file_info
 from ..utils.path import is_descendant, path_is_under
 from .clouddrive import CloudDriveChange, CloudDriveRoute, local_for, match_route
@@ -102,6 +102,7 @@ class WatcherService:
             blacklist_patterns=lib.blacklist_patterns,
             min_file_size=lib.min_file_size,
             media_extensions=frozenset(self._media_extensions) if self._media_extensions else None,
+            fail_dir=fail_dir_for_scan(fail_dir=lib.fail_dir, exclude_fail_dir=lib.exclude_fail_dir),
         )
 
     def _register_cloud(self, lib: Library) -> None:
@@ -183,6 +184,7 @@ class WatcherService:
                         patterns=lib.patterns,
                         skip_patterns=[lib.trailer_pattern, *(lib.blacklist_patterns or [])],
                         min_file_size=lib.min_file_size,
+                        fail_dir=fail_dir_for_scan(fail_dir=lib.fail_dir, exclude_fail_dir=lib.exclude_fail_dir),
                     )
             except OSError as exc:
                 self._log_observer_start_error(exc)
@@ -229,6 +231,7 @@ class WatcherService:
             patterns=lib.patterns,
             skip_patterns=[lib.trailer_pattern, *(lib.blacklist_patterns or [])],
             min_file_size=lib.min_file_size,
+            fail_dir=fail_dir_for_scan(fail_dir=lib.fail_dir, exclude_fail_dir=lib.exclude_fail_dir),
         )
 
     def add_library(
@@ -239,6 +242,7 @@ class WatcherService:
         patterns: list[str] | None = None,
         skip_patterns: Sequence[str | None] | None = None,
         min_file_size: int = 0,
+        fail_dir: str = "",
     ) -> None:
         """运行时热添加 native 监控库. clouddrive 库走 sync_library."""
         self._cloud_routes.pop(library_id, None)
@@ -252,6 +256,7 @@ class WatcherService:
                     patterns=patterns,
                     skip_patterns=skip_patterns,
                     min_file_size=min_file_size,
+                    fail_dir=fail_dir,
                 )
             except OSError as exc:
                 self._log_observer_start_error(exc)
@@ -278,6 +283,7 @@ class WatcherService:
             patterns=patterns,
             skip_patterns=skip_patterns,
             min_file_size=min_file_size,
+            fail_dir=fail_dir,
         )
         logger.info("library watch added", library_id=library_id, path=path, recursive=recursive)
 

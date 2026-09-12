@@ -94,6 +94,10 @@ export interface LibraryFormState {
   link_mode: LibraryResponse["link_mode"];
   strm_content_template: string;
   write_nfo: boolean;
+  trash_empty_source: boolean;
+  fail_dir: string;
+  move_to_fail_dir: boolean;
+  exclude_fail_dir: boolean;
   copy_resources: DownloadableResource[];
   trailer_pattern: string;
   blacklist_patterns: string;
@@ -125,6 +129,10 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
     link_mode: "strm",
     strm_content_template: "",
     write_nfo: true,
+    trash_empty_source: false,
+    fail_dir: "",
+    move_to_fail_dir: false,
+    exclude_fail_dir: true,
     copy_resources: DOWNLOADABLE_RESOURCES.filter((r) => r !== "trailer"),
     trailer_pattern: "(?i)trailer",
     blacklist_patterns: "",
@@ -158,6 +166,10 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     link_mode: lib.link_mode,
     strm_content_template: lib.strm_content_template ?? "",
     write_nfo: lib.write_nfo,
+    trash_empty_source: lib.trash_empty_source,
+    fail_dir: lib.fail_dir ?? "",
+    move_to_fail_dir: lib.move_to_fail_dir ?? false,
+    exclude_fail_dir: lib.exclude_fail_dir ?? true,
     copy_resources: parseCopyResources(lib.copy_resources),
     trailer_pattern: lib.trailer_pattern,
     blacklist_patterns: lib.blacklist_patterns?.join("\n") ?? "",
@@ -204,6 +216,10 @@ function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
     link_mode: form.link_mode,
     strm_content_template: form.strm_content_template.trim(),
     write_nfo: form.write_nfo,
+    trash_empty_source: form.trash_empty_source,
+    fail_dir: form.fail_dir.trim(),
+    move_to_fail_dir: form.move_to_fail_dir,
+    exclude_fail_dir: form.exclude_fail_dir,
     copy_resources: form.copy_resources,
     trailer_pattern: form.trailer_pattern,
     blacklist_patterns: parseBlacklistPatterns(form.blacklist_patterns),
@@ -406,6 +422,37 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
             />
           </div>
         </div>
+        <Switch
+          id="library-trash-empty-source"
+          label={t("fieldTrashEmptySource")}
+          description={t("fieldTrashEmptySourceHint")}
+          checked={value.trash_empty_source}
+          onChange={(e) => onChange({ ...value, trash_empty_source: e.currentTarget.checked })}
+        />
+        <TextInput
+          id="library-fail-dir"
+          label={t("fieldFailDir")}
+          description={t("fieldFailDirHint")}
+          placeholder={t("fieldFailDirPlaceholder")}
+          value={value.fail_dir}
+          onChange={(e) => onChange({ ...value, fail_dir: e.currentTarget.value })}
+        />
+        <Switch
+          id="library-move-to-fail-dir"
+          label={t("fieldMoveToFailDir")}
+          description={t("fieldMoveToFailDirHint")}
+          checked={value.move_to_fail_dir}
+          disabled={!value.fail_dir.trim()}
+          onChange={(e) => onChange({ ...value, move_to_fail_dir: e.currentTarget.checked })}
+        />
+        <Switch
+          id="library-exclude-fail-dir"
+          label={t("fieldExcludeFailDir")}
+          description={t("fieldExcludeFailDirHint")}
+          checked={value.exclude_fail_dir}
+          disabled={!value.fail_dir.trim()}
+          onChange={(e) => onChange({ ...value, exclude_fail_dir: e.currentTarget.checked })}
+        />
       </Stack>
       <Checkbox.Group
         label={t("fieldCopyResources")}

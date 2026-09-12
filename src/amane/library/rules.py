@@ -35,6 +35,31 @@ _SUBTITLE_EXT_RE = re.compile(r"^\.[a-z0-9]+$")
 # 固定保留名. 路径任一深度含此目录名则不入库.
 TRASH_DIRNAME = ".amane_trash"
 
+
+def validate_fail_dir(value: str) -> str:
+    """库根下单层相对目录名; 空串关闭. 不允许分隔符、`.` / `..`、或与回收站同名."""
+    stripped = value.strip()
+    if not stripped:
+        return ""
+    if "/" in stripped or "\\" in stripped or stripped in {".", "..", TRASH_DIRNAME}:
+        raise ValueError(f"invalid fail_dir: {value!r}")
+    return stripped
+
+
+def is_in_fail_dir(path: Path, fail_dir: str) -> bool:
+    """路径任一深度组件等于手填的失败目录名则视为失败区内容."""
+    name = fail_dir.strip()
+    if not name:
+        return False
+    return any(part == name for part in path.parts)
+
+
+def fail_dir_for_scan(*, fail_dir: str, exclude_fail_dir: bool) -> str:
+    """排除开启且目录名有效时返回规范化名, 供 LibraryScan / watcher 使用."""
+    if not exclude_fail_dir:
+        return ""
+    return validate_fail_dir(fail_dir)
+
 # .strm 在扫描扩展名里 (当正片入口), 但是路径指针不是视频字节; 体积过滤不把它当视频字节.
 _POINTER_EXTENSIONS = frozenset({".strm"})
 
@@ -147,3 +172,6 @@ def is_skipped_media(path: Path, pattern: str | None) -> bool:
 def is_in_trash(path: Path) -> bool:
     """路径任一深度组件为 `.amane_trash` 则视为回收站内容: 不入库、不触发监控事件."""
     return any(part == TRASH_DIRNAME for part in path.parts)
+
+
+FailDirName = Annotated[str, AfterValidator(validate_fail_dir)]

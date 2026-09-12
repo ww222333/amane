@@ -1103,7 +1103,8 @@ export const ContentTypeSchema = {
         'western',
         'fc2',
         'amateur',
-        'hentai'
+        'hentai',
+        'unknown'
     ],
     title: 'ContentType'
 } as const;
@@ -2215,6 +2216,10 @@ export const HotSettingsSchema = {
                             'freejavbt'
                         ]
                     },
+                    unknown: {
+                        prefixes: [],
+                        sites: []
+                    },
                     western: {
                         prefixes: [],
                         sites: [
@@ -2815,6 +2820,26 @@ export const LibraryCreateRequestSchema = {
             title: 'Write Nfo',
             default: true
         },
+        trash_empty_source: {
+            type: 'boolean',
+            title: 'Trash Empty Source',
+            default: false
+        },
+        fail_dir: {
+            type: 'string',
+            title: 'Fail Dir',
+            default: ''
+        },
+        move_to_fail_dir: {
+            type: 'boolean',
+            title: 'Move To Fail Dir',
+            default: false
+        },
+        exclude_fail_dir: {
+            type: 'boolean',
+            title: 'Exclude Fail Dir',
+            default: true
+        },
         copy_resources: {
             items: {
                 $ref: '#/components/schemas/DownloadableResource'
@@ -3043,6 +3068,22 @@ export const LibraryResponseSchema = {
             type: 'boolean',
             title: 'Write Nfo'
         },
+        trash_empty_source: {
+            type: 'boolean',
+            title: 'Trash Empty Source'
+        },
+        fail_dir: {
+            type: 'string',
+            title: 'Fail Dir'
+        },
+        move_to_fail_dir: {
+            type: 'boolean',
+            title: 'Move To Fail Dir'
+        },
+        exclude_fail_dir: {
+            type: 'boolean',
+            title: 'Exclude Fail Dir'
+        },
         copy_resources: {
             items: {
                 $ref: '#/components/schemas/DownloadableResource'
@@ -3079,6 +3120,10 @@ export const LibraryResponseSchema = {
         'link_mode',
         'subtitle_extensions',
         'write_nfo',
+        'trash_empty_source',
+        'fail_dir',
+        'move_to_fail_dir',
+        'exclude_fail_dir',
         'copy_resources',
         'trailer_pattern',
         'blacklist_patterns',
@@ -3321,6 +3366,50 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Write Nfo'
+        },
+        trash_empty_source: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Trash Empty Source'
+        },
+        fail_dir: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Fail Dir'
+        },
+        move_to_fail_dir: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Move To Fail Dir'
+        },
+        exclude_fail_dir: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Exclude Fail Dir'
         },
         copy_resources: {
             anyOf: [
@@ -4718,6 +4807,30 @@ export const OrganizeSubmissionSchema = {
             ],
             title: 'Copy Resources',
             description: '覆盖 Library.copy_resources; None 沿用库设置'
+        },
+        trash_empty_source: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Trash Empty Source',
+            description: '覆盖 Library.trash_empty_source; None 沿用库设置. 为真且移动成功后源目录无视频则整目录入 .amane_trash'
+        },
+        move_to_fail_dir: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Move To Fail Dir',
+            description: '覆盖 Library.move_to_fail_dir; None 沿用库设置. 为真且库 fail_dir 非空时, 无 Metadata 的正片整夹移入失败目录'
         },
         media_file_ids: {
             anyOf: [

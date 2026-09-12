@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from ..db import TaskType
-from ..library import MEDIA_EXTENSIONS, LibraryFileKind, LibraryScan
+from ..library import MEDIA_EXTENSIONS, LibraryFileKind, LibraryScan, fail_dir_for_scan
 from ..parsing import parse_file_info
 from ..utils.path import nfc_path
 from ..utils.threads import path_exists, path_is_dir
@@ -39,6 +39,11 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
             blacklist_patterns=library.blacklist_patterns if library is not None else None,
             min_file_size=library.min_file_size if library is not None else 0,
             media_extensions=self._media_extensions,
+            fail_dir=(
+                fail_dir_for_scan(fail_dir=library.fail_dir, exclude_fail_dir=library.exclude_fail_dir)
+                if library is not None
+                else ""
+            ),
         )
 
         added = removed = scrape = 0

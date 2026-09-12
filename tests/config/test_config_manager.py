@@ -230,6 +230,7 @@ class TestScrapingPriorityMigration:
         assert routes[ContentType.CHINESE].sites[0] == SiteName.IQQTV
         assert routes[ContentType.HENTAI].sites[0] == SiteName.GETCHU
         assert routes[ContentType.WESTERN].sites[0] == SiteName.THEPORNDB
+        assert routes[ContentType.UNKNOWN].sites == []
         assert SiteName.AVSOX in routes[ContentType.UNCENSORED].sites
         assert SiteName.FC2PPVDB in routes[ContentType.FC2].sites
         assert SiteName.OFFICIAL in routes[ContentType.CENSORED].sites

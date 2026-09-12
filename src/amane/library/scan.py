@@ -6,7 +6,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .rules import MEDIA_EXTENSIONS, compile_skip_patterns, is_in_trash, is_undersized_video
+from .rules import MEDIA_EXTENSIONS, compile_skip_patterns, is_in_fail_dir, is_in_trash, is_undersized_video
 
 if TYPE_CHECKING:
     from re import Pattern
@@ -33,18 +33,22 @@ class LibraryScan:
         blacklist_patterns: Sequence[str] | None = None,
         min_file_size: int = 0,
         media_extensions: frozenset[str] | None = None,
+        fail_dir: str = "",
     ) -> None:
         self.patterns = patterns
         self.trailer_pattern = trailer_pattern
         self.blacklist_patterns = list(blacklist_patterns or [])
         self.min_file_size = min_file_size
         self.media_extensions = MEDIA_EXTENSIONS if media_extensions is None else media_extensions
+        self.fail_dir = fail_dir.strip()
         self._trailer: list[Pattern[str]] | None = compile_skip_patterns([trailer_pattern])
         self._blacklist: list[Pattern[str]] | None = compile_skip_patterns(self.blacklist_patterns)
 
     def classify(self, path: Path) -> LibraryFileKind | None:
-        """回收站与无规则命中的其它文件返回 None."""
+        """回收站 / 排除中的失败目录与无规则命中的其它文件返回 None."""
         if is_in_trash(path):
+            return None
+        if self.fail_dir and is_in_fail_dir(path, self.fail_dir):
             return None
         name = path.name
         # 黑名单或体积过小 → 回收; 预告片 → 跳过.

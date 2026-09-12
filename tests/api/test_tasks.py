@@ -85,7 +85,7 @@ class TestSubmitTask:
             ("vixen.23.04.15", "western"),
             ("MD-0123", "chinese"),
             ("MIDV-123", "censored"),
-            ("VIDEO", "western"),
+            ("VIDEO", "unknown"),
         ):
             inferred = await client.post("tasks", json={"type": "scrape", "number": number})
             assert inferred.json()["payload"]["content_type"] == expected

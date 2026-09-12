@@ -36,6 +36,7 @@
 | 素人 | mgstage → dmm → javdb → javbus |
 | 欧美 | theporndb → javdb → freejavbt |
 | 里番 | getchu → dmm → javdb |
+| 未知 | (默认空; 自行配置站点) |
 
 ## 示例
 

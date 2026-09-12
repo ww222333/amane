@@ -10,8 +10,8 @@ from ..config import HotSettings, WatermarkConfig
 from ..db.models import Library, MediaFile
 from ..db.repo_types import MediaFileUpdates
 from ..enums import ActorGender, DownloadableResource, LinkMode
-from ..library import MEDIA_EXTENSIONS, LibraryFileKind, LibraryScan
-from ..library.rules import is_in_trash
+from ..library import MEDIA_EXTENSIONS, TRASH_DIRNAME, LibraryFileKind, LibraryScan, fail_dir_for_scan
+from ..library.rules import is_in_fail_dir, is_in_trash, validate_fail_dir
 from ..media import ResourceStore, apply_cover_watermarks_from_info, crop_poster
 from ..media import write_nfo as write_nfo_file
 from ..media.pipeline import RESOURCE_URL_PREFIX
@@ -25,6 +25,7 @@ from ..organize import (
     render_strm_content,
     resolve_paths,
 )
+from ..organize.file import OrganizeResult as DiskOrganizeResult
 from ..organize.link import create_video_link
 from ..parsing import FileInfo, parse_file_info
 from ..utils.path import existing_disk_path as existing_disk_path_sync
@@ -435,11 +436,14 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         indexed = await self._load_scope(payload, library)
         library_root = Path(library.path)
         media_extensions = frozenset(self._config.watcher.media_extensions) or MEDIA_EXTENSIONS
+        fail_dir_name = validate_fail_dir(library.fail_dir)
+        exclude_fail_dir = library.exclude_fail_dir and bool(fail_dir_name)
         scan = LibraryScan(
             trailer_pattern=library.trailer_pattern,
             blacklist_patterns=library.blacklist_patterns,
             min_file_size=library.min_file_size,
             media_extensions=media_extensions,
+            fail_dir=fail_dir_for_scan(fail_dir=fail_dir_name, exclude_fail_dir=exclude_fail_dir),
         )
         live: list[MediaFile] = []
         skipped = 0
@@ -450,7 +454,8 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                 if mf.id is not None:
                     mf_path = Path(mf.path)
                     missing = await existing_disk_path(mf_path, follow_symlinks=False) is None
-                    if missing or not is_descendant(mf_path, library_root) or is_in_trash(mf_path):
+                    in_fail = exclude_fail_dir and is_in_fail_dir(mf_path, fail_dir_name)
+                    if missing or not is_descendant(mf_path, library_root) or is_in_trash(mf_path) or in_fail:
                         await self._repo.delete_media_file(mf.id)
                     else:
                         kind = await _classify_indexed(mf_path, scan)
@@ -466,6 +471,14 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
 
         organized = 0
         failed = 0
+        leftovers_trashed = 0
+        failed_moved = 0
+        source_parents: set[Path] = set()
+        moved_fail_parents: set[str] = set()
+        trash_empty_source = (
+            library.trash_empty_source if payload.trash_empty_source is None else payload.trash_empty_source
+        )
+        move_to_fail_dir = library.move_to_fail_dir if payload.move_to_fail_dir is None else payload.move_to_fail_dir
         total = len(live)
         if total == 0:
             await self.report_progress(1, 1, "done")
@@ -474,13 +487,33 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
             for i, media_file in enumerate(live, start=1):
                 path_str = media_file.path
                 file_path = Path(path_str)
-                if media_file.metadata_id is None:
-                    skipped += 1
-                    await self.report_progress(i, total, file_path.name)
-                    continue
-
-                metadata = await self._repo.get_metadata(media_file.metadata_id)
+                metadata = (
+                    await self._repo.get_metadata(media_file.metadata_id)
+                    if media_file.metadata_id is not None
+                    else None
+                )
                 if metadata is None:
+                    # 无 Metadata: 可选整夹移入失败目录; 同父目录只搬一次.
+                    parent_key = nfc_path(str(file_path.parent))
+                    if parent_key in moved_fail_parents:
+                        if media_file.id is not None:
+                            await self._repo.delete_media_file(media_file.id)
+                        await self.report_progress(i, total, file_path.name)
+                        continue
+                    if move_to_fail_dir and fail_dir_name:
+                        moved = await _move_source_dir_to_fail(
+                            self._repo,
+                            library_id=library.id,
+                            library_root=library_root,
+                            file_path=file_path,
+                            fail_dir_name=fail_dir_name,
+                            exclude_fail_dir=exclude_fail_dir,
+                        )
+                        if moved:
+                            moved_fail_parents.add(parent_key)
+                            failed_moved += 1
+                            await self.report_progress(i, total, file_path.name)
+                            continue
                     skipped += 1
                     await self.report_progress(i, total, file_path.name)
                     continue
@@ -508,11 +541,22 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     await commit_organized_media_file(self._repo, media_file, fop_result.dest, library_root)
                 if fop_result.success:
                     organized += 1
+                    # 移动离开源路径后记录父目录, 供可选清残留.
+                    if (
+                        trash_empty_source
+                        and library.move_mode == MoveMode.MOVE
+                        and fop_result.dest is not None
+                        and nfc_path(str(fop_result.dest)) != nfc_path(path_str)
+                    ):
+                        source_parents.add(file_path.parent)
                 else:
                     logger.warning("organize failed", path=path_str, error=fop_result.error)
                     failed += 1
                 await self.report_progress(i, total, file_path.name)
             await self.report_progress(total, total, "done")
+
+        if trash_empty_source and source_parents:
+            leftovers_trashed = await _trash_empty_source_dirs(library_root, source_parents, media_extensions)
 
         logger.info(
             "organize completed",
@@ -520,9 +564,113 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
             organized=organized,
             skipped=skipped,
             failed=failed,
+            leftovers_trashed=leftovers_trashed,
+            failed_moved=failed_moved,
         )
 
-        return TaskResult(True, result=OrganizeResult(organized=organized, skipped=skipped, failed=failed))
+        return TaskResult(
+            True,
+            result=OrganizeResult(
+                organized=organized,
+                skipped=skipped,
+                failed=failed,
+                leftovers_trashed=leftovers_trashed,
+                failed_moved=failed_moved,
+            ),
+        )
+
+
+@in_thread
+def _dir_has_video(directory: Path, media_extensions: frozenset[str]) -> bool:
+    """目录内任意深度有视频扩展名文件则为真."""
+    if not directory.is_dir():
+        return False
+    for path in directory.rglob("*"):
+        if path.is_file() and path.suffix.lower() in media_extensions:
+            return True
+    return False
+
+
+@in_thread
+def _move_dir_to_trash(directory: Path, trash_dir: Path) -> DiskOrganizeResult:
+    return execute_organize.sync(
+        source=directory,
+        target_dir=trash_dir,
+        target_stem=directory.name,
+        mode=MoveMode.MOVE,
+        suffix="",
+    )
+
+
+async def _move_source_dir_to_fail(
+    repo: Repository,
+    *,
+    library_id: int,
+    library_root: Path,
+    file_path: Path,
+    fail_dir_name: str,
+    exclude_fail_dir: bool,
+) -> bool:
+    """无 Metadata 时整夹移入失败目录. 不碰库根; 同夹索引随路径更新或删除."""
+    source_dir = file_path.parent
+    if nfc_path(str(source_dir)) == nfc_path(str(library_root)):
+        return False
+    if not is_descendant(source_dir, library_root):
+        return False
+    if is_in_trash(source_dir) or is_in_fail_dir(source_dir, fail_dir_name):
+        return False
+    if not await path_is_dir(source_dir):
+        return False
+
+    target_root = library_root / fail_dir_name
+    result = await _move_dir_to_trash(source_dir, target_root)
+    if not result.success or result.dest is None:
+        logger.warning("fail dir move failed", path=str(source_dir), error=result.error)
+        return False
+
+    old_prefix = nfc_path(str(source_dir))
+    new_prefix = nfc_path(str(result.dest))
+    indexed = await repo.list_media_files(library_id=library_id, limit=None)
+    for mf in indexed:
+        if mf.id is None:
+            continue
+        if not path_is_under(mf.path, old_prefix):
+            continue
+        if exclude_fail_dir:
+            await repo.delete_media_file(mf.id)
+            continue
+        relative = Path(nfc_path(mf.path)).relative_to(Path(old_prefix))
+        await repo.update_media_file(mf.id, path=str(Path(new_prefix) / relative))
+
+    logger.info("source moved to fail dir", path=str(source_dir), dest=str(result.dest))
+    return True
+
+
+async def _trash_empty_source_dirs(
+    library_root: Path,
+    source_parents: set[Path],
+    media_extensions: frozenset[str],
+) -> int:
+    """源目录递归无视频则整目录移入库内 `.amane_trash`. 不碰库根."""
+    trash_dir = library_root / TRASH_DIRNAME
+    trashed = 0
+    # 深层目录先处理, 避免父目录仍含已计划搬走的子目录误判.
+    for directory in sorted(source_parents, key=lambda p: len(p.parts), reverse=True):
+        if nfc_path(str(directory)) == nfc_path(str(library_root)):
+            continue
+        if not is_descendant(directory, library_root) or is_in_trash(directory):
+            continue
+        if not await path_is_dir(directory):
+            continue
+        if await _dir_has_video(directory, media_extensions):
+            continue
+        result = await _move_dir_to_trash(directory, trash_dir)
+        if not result.success:
+            logger.warning("empty source trash failed", path=str(directory), error=result.error)
+            continue
+        logger.info("empty source trashed", path=str(directory), dest=str(result.dest))
+        trashed += 1
+    return trashed
 
 
 def _add_resource_ref(url: str, live_urls: set[str], live_hashes: set[str]) -> None:

@@ -163,7 +163,7 @@ class MediaFile(SQLModel, table=True):
     number: str | None = Field(default=None, index=True)
     status: MediaFileStatus = Field(default=MediaFileStatus.PENDING, index=True)
     # 文件相位: path 的投影, 随 path 写入/更新; 不进对外 PATCH.
-    content_type: ContentType = Field(default=ContentType.WESTERN, index=True)
+    content_type: ContentType = Field(default=ContentType.UNKNOWN, index=True)
     mosaic: Mosaic | None = Field(default=None, index=True)
     has_subtitle: bool = Field(default=False, index=True)
     definition: str | None = Field(default=None, index=True)
@@ -305,6 +305,14 @@ class Library(SQLModel, table=True):
     )
     """ORGANIZE 时在视频同目录发现字幕的扩展名列表; 空列表关闭."""
     write_nfo: bool = Field(default=True)
+    trash_empty_source: bool = Field(default=False)
+    """ORGANIZE 为移动且视频离开源目录后: 源目录递归无视频则整目录移入 `.amane_trash`. 默认关."""
+    fail_dir: str = Field(default="")
+    """库根下失败目录相对名; 空则不搬家. 仅媒体库设置手填."""
+    move_to_fail_dir: bool = Field(default=False)
+    """ORGANIZE 时无 Metadata 是否整夹移入 fail_dir. 默认关."""
+    exclude_fail_dir: bool = Field(default=True)
+    """fail_dir 非空时: 扫描 / 监控 / 整理剪枝跳过该目录. 默认开."""
     copy_resources: list[DownloadableResource] = Field(
         default_factory=lambda: [r for r in DownloadableResource if r != DownloadableResource.trailer],
         sa_column=Column(JSON, nullable=False),

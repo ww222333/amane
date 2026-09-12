@@ -1171,3 +1171,175 @@ async def test_organize_prunes_path_outside_library_root(
     assert result.success is True
     assert await repo.get_media_file(stray_row.id) is None
     assert stray.exists()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+@pytest.mark.parametrize(
+    ("enabled", "extra_video", "expect_trashed"),
+    [
+        (False, False, False),
+        (True, False, True),
+        (True, True, False),
+    ],
+)
+async def test_organize_trash_empty_source(
+    repo: Repository,
+    resource_store: ResourceStore,
+    tmp_path: Path,
+    enabled: bool,
+    extra_video: bool,
+    expect_trashed: bool,
+) -> None:
+    """开关开启且源目录递归无视频时整目录入 .amane_trash; 有视频或关闭则不动."""
+    from amane.library import TRASH_DIRNAME
+
+    lib_root = tmp_path / "lib"
+    src_dir = lib_root / "incoming" / "MAD-047"
+    src_dir.mkdir(parents=True)
+    src = src_dir / "MAD-047.mp4"
+    src.write_bytes(b"vid")
+    (src_dir / "fanart.jpg").write_bytes(b"img")
+    if extra_video:
+        (src_dir / "keep.mp4").write_bytes(b"keep")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=False,
+        trash_empty_source=enabled,
+        move_mode=MoveMode.MOVE,
+    )
+    assert lib.id is not None
+    meta = await repo.upsert_metadata(number="MAD-047", studio="Studio")
+    assert meta.id is not None
+    mf = await repo.create_media_file(
+        lib.id,
+        path=str(src),
+        number="MAD-047",
+        status=MediaFileStatus.SCRAPED,
+        metadata_id=meta.id,
+    )
+    assert mf.id is not None
+
+    org = OrganizeHandler(repo, HotSettings(), resource_store)
+    result = await org.handle(OrganizePayload(library_id=lib.id, path=str(lib_root)))
+    assert result.success is True
+    assert result.result is not None
+    assert result.result.leftovers_trashed == (1 if expect_trashed else 0)
+    assert not src.exists()
+    if expect_trashed:
+        assert not src_dir.exists()
+        trash = lib_root / TRASH_DIRNAME / "MAD-047"
+        assert trash.is_dir()
+        assert (trash / "fanart.jpg").exists()
+    else:
+        assert src_dir.is_dir()
+        assert (src_dir / "fanart.jpg").exists()
+        if extra_video:
+            assert (src_dir / "keep.mp4").exists()
+
+
+@pytest.mark.asyncio(loop_scope="function")
+@pytest.mark.parametrize(
+    ("enabled", "at_library_root", "expect_moved"),
+    [
+        (False, False, False),
+        (True, False, True),
+        (True, True, False),
+    ],
+)
+async def test_organize_move_to_fail_dir(
+    repo: Repository,
+    resource_store: ResourceStore,
+    tmp_path: Path,
+    enabled: bool,
+    at_library_root: bool,
+    expect_moved: bool,
+) -> None:
+    """无 Metadata 时整夹移入手填失败目录; 库根视频不搬; 关闭则仅跳过."""
+    lib_root = tmp_path / "lib"
+    lib_root.mkdir()
+    if at_library_root:
+        src = lib_root / "NOMETA-001.mp4"
+        src.write_bytes(b"vid")
+        src_dir = lib_root
+    else:
+        src_dir = lib_root / "incoming" / "NOMETA-001"
+        src_dir.mkdir(parents=True)
+        src = src_dir / "NOMETA-001.mp4"
+        src.write_bytes(b"vid")
+        (src_dir / "fanart.jpg").write_bytes(b"img")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=False,
+        fail_dir="_failed",
+        move_to_fail_dir=enabled,
+        exclude_fail_dir=True,
+    )
+    assert lib.id is not None
+    mf = await repo.create_media_file(
+        lib.id,
+        path=str(src),
+        number="NOMETA-001",
+        status=MediaFileStatus.PENDING,
+    )
+    assert mf.id is not None
+    assert mf.metadata_id is None
+
+    org = OrganizeHandler(repo, HotSettings(), resource_store)
+    result = await org.handle(OrganizePayload(library_id=lib.id, path=str(lib_root)))
+    assert result.success is True
+    assert result.result is not None
+    assert result.result.failed_moved == (1 if expect_moved else 0)
+
+    if expect_moved:
+        assert not src_dir.exists()
+        dest = lib_root / "_failed" / "NOMETA-001"
+        assert dest.is_dir()
+        assert (dest / "NOMETA-001.mp4").exists()
+        assert (dest / "fanart.jpg").exists()
+        assert await repo.get_media_file(mf.id) is None
+    else:
+        assert src.exists()
+        remaining = await repo.get_media_file(mf.id)
+        assert remaining is not None
+        if enabled:
+            assert result.result.skipped == 1
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_organize_exclude_fail_dir_prunes_index(
+    repo: Repository,
+    resource_store: ResourceStore,
+    tmp_path: Path,
+) -> None:
+    """排除失败目录时, 已在失败目录内的索引在整理剪枝中删除."""
+    lib_root = tmp_path / "lib"
+    fail = lib_root / "_failed" / "OLD"
+    fail.mkdir(parents=True)
+    video = fail / "OLD.mp4"
+    video.write_bytes(b"vid")
+
+    lib = await repo.create_library(
+        name="t",
+        path=str(lib_root),
+        write_nfo=False,
+        fail_dir="_failed",
+        exclude_fail_dir=True,
+    )
+    assert lib.id is not None
+    mf = await repo.create_media_file(
+        lib.id,
+        path=str(video),
+        number="OLD",
+        status=MediaFileStatus.PENDING,
+    )
+    assert mf.id is not None
+
+    org = OrganizeHandler(repo, HotSettings(), resource_store)
+    result = await org.handle(OrganizePayload(library_id=lib.id, path=str(lib_root)))
+    assert result.success is True
+    assert await repo.get_media_file(mf.id) is None
+    assert video.exists()

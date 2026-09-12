@@ -138,6 +138,14 @@ class OrganizePayload(LibraryBase):
     copy_resources: list[DownloadableResource] | None = Field(
         default=None, description="覆盖 Library.copy_resources; None 沿用库设置"
     )
+    trash_empty_source: bool | None = Field(
+        default=None,
+        description="覆盖 Library.trash_empty_source; None 沿用库设置. 为真且移动成功后源目录无视频则整目录入 .amane_trash",
+    )
+    move_to_fail_dir: bool | None = Field(
+        default=None,
+        description="覆盖 Library.move_to_fail_dir; None 沿用库设置. 为真且库 fail_dir 非空时, 无 Metadata 的正片整夹移入失败目录",
+    )
     media_file_ids: list[int] | None = Field(
         default=None,
         description="勾选快照; 与 path 不能同时指定. None 表示 path 范围内的全部索引",
@@ -158,12 +166,19 @@ class OrganizePayload(LibraryBase):
         if self.copy_resources is None:
             # JSON 列读回是 str; Pydantic dump 要 enum, 否则 UnexpectedValue 警告.
             self.copy_resources = [DownloadableResource(r) for r in lib.copy_resources]
+        if self.trash_empty_source is None:
+            self.trash_empty_source = lib.trash_empty_source
+        if self.move_to_fail_dir is None:
+            self.move_to_fail_dir = lib.move_to_fail_dir
 
 
 class OrganizeResult(BaseModel):
     organized: int
     skipped: int
     failed: int
+    leftovers_trashed: int = 0
+    failed_moved: int = 0
+    """无 Metadata 且整夹移入失败目录的次数."""
 
 
 # --- TRASH ---

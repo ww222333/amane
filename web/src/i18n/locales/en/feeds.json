@@ -102,7 +102,8 @@
     "western": "Western",
     "fc2": "FC2",
     "amateur": "Amateur",
-    "hentai": "Hentai"
+    "hentai": "Hentai",
+    "unknown": "Unknown"
   },
   "columns": {
     "name": "Name",

@@ -31,6 +31,7 @@ class ContentType(StrEnum):
     FC2 = "fc2"
     AMATEUR = "amateur"
     HENTAI = "hentai"
+    UNKNOWN = "unknown"
 
 
 class Mosaic(StrEnum):
@@ -265,7 +266,7 @@ def extract_number(text: str, escape_strings: list[str] | None = None) -> str | 
 
 
 def infer_content_type(number: str, file_path: str | None = None) -> ContentType:
-    """有挂载文件按路径, 否则按番号; 未命中已知形态则欧美."""
+    """有挂载文件按路径, 否则按番号; 未命中已知形态则未知."""
     return parse_file_info(file_path, text=number).content_type
 
 
@@ -443,7 +444,7 @@ def _identify(
         if found := _match(name, escape, generic=False):
             return found
     if not fallback:
-        return None, ContentType.WESTERN
+        return None, ContentType.UNKNOWN
     return _fallback(stem, escape)
 
 
@@ -537,7 +538,7 @@ def _match(basename: str, escape_strings: list[str], *, generic: bool) -> tuple[
 
 
 def _fallback(stem: str, escape: list[str]) -> tuple[str, ContentType]:
-    """路径仍未命中: FC2/HEYZO 关键字视为该族, 否则清理后的原文 + 欧美."""
+    """路径仍未命中: FC2/HEYZO 关键字视为该族, 否则清理后的原文 + 未知."""
     t = _prepare(stem, escape)
     if "FC2" in t.catalog:
         return t.catalog.replace("PPV", "").replace("_", "-").replace("--", "-"), ContentType.FC2
@@ -550,7 +551,7 @@ def _fallback(stem: str, escape: list[str]) -> tuple[str, ContentType]:
     result = temp_name.strip("-_. ")
     if result.startswith("FC-"):
         return result.replace("FC-", "FC2-"), ContentType.FC2
-    return result, ContentType.WESTERN
+    return result, ContentType.UNKNOWN
 
 
 def _type_of_catalog_id(number: str) -> ContentType:
@@ -571,7 +572,7 @@ def _type_of_catalog_id(number: str) -> ContentType:
         return ContentType.CHINESE
     if _CATALOG_NUMBER.search(upper):
         return ContentType.CENSORED
-    return ContentType.WESTERN
+    return ContentType.UNKNOWN
 
 
 def _prefix(number: str) -> str:

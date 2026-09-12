@@ -293,6 +293,10 @@ class LibraryUpdates(TypedDict, total=False):
     subtitle_template: str | None
     subtitle_extensions: list[str]
     write_nfo: bool
+    trash_empty_source: bool
+    fail_dir: str
+    move_to_fail_dir: bool
+    exclude_fail_dir: bool
     copy_resources: list[DownloadableResource]
     trailer_pattern: str
     blacklist_patterns: list[str]

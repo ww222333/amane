@@ -8,6 +8,7 @@ from ...library import (
     DEFAULT_SUBTITLE_EXTENSIONS,
     DEFAULT_TRAILER_PATTERN,
     BlacklistPattern,
+    FailDirName,
     MinFileSize,
     SubtitleExtensions,
     TrailerPattern,
@@ -54,6 +55,14 @@ class LibraryCreateRequest(BaseModel):
     subtitle_template: PathTemplate | None = None
     subtitle_extensions: SubtitleExtensions = Field(default_factory=lambda: list(DEFAULT_SUBTITLE_EXTENSIONS))
     write_nfo: bool = True
+    trash_empty_source: bool = False
+    """整理为移动且视频离开后: 源目录递归无视频则整目录移入 `.amane_trash`."""
+    fail_dir: FailDirName = ""
+    """库根下失败目录相对名; 空则不搬家. 仅媒体库设置手填."""
+    move_to_fail_dir: bool = False
+    """整理时无 Metadata 是否整夹移入 fail_dir."""
+    exclude_fail_dir: bool = True
+    """fail_dir 非空时扫描 / 监控 / 整理剪枝跳过该目录."""
     copy_resources: list[DownloadableResource] = Field(default_factory=lambda: list(DownloadableResource))
     trailer_pattern: TrailerPattern = DEFAULT_TRAILER_PATTERN
     blacklist_patterns: list[BlacklistPattern] = []
@@ -98,6 +107,10 @@ class LibraryResponse(BaseModel):
     subtitle_template: str | None = None
     subtitle_extensions: list[str]
     write_nfo: bool
+    trash_empty_source: bool
+    fail_dir: str
+    move_to_fail_dir: bool
+    exclude_fail_dir: bool
     copy_resources: list[DownloadableResource]
     trailer_pattern: str
     blacklist_patterns: list[str]

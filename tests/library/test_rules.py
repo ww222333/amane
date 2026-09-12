@@ -7,13 +7,17 @@ from pydantic import ValidationError
 
 from amane.db.models import Library
 from amane.library.rules import (
+    TRASH_DIRNAME,
     compile_skip_patterns,
+    fail_dir_for_scan,
+    is_in_fail_dir,
     is_in_trash,
     is_skipped_media,
     is_undersized_video,
     is_video_media,
     normalize_subtitle_extensions,
     validate_blacklist_pattern,
+    validate_fail_dir,
     validate_subtitle_extension,
     validate_trailer_pattern,
 )
@@ -178,3 +182,38 @@ def test_is_undersized_video_broken_symlink_is_not_undersized(tmp_path: Path):
 
 def test_is_undersized_video_stat_failure_is_not_undersized(tmp_path: Path):
     assert is_undersized_video(tmp_path / "missing.mp4", 10) is False
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("", ""),
+        ("  _failed  ", "_failed"),
+        ("failed", "failed"),
+    ],
+)
+def test_validate_fail_dir_ok(raw: str, expected: str) -> None:
+    assert validate_fail_dir(raw) == expected
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "a/b",
+        r"a\b",
+        ".",
+        "..",
+        TRASH_DIRNAME,
+    ],
+)
+def test_validate_fail_dir_rejects(raw: str) -> None:
+    with pytest.raises(ValueError, match="invalid fail_dir"):
+        validate_fail_dir(raw)
+
+
+def test_is_in_fail_dir_and_scan_helper() -> None:
+    assert is_in_fail_dir(Path("/lib/_failed/x.mp4"), "_failed") is True
+    assert is_in_fail_dir(Path("/lib/ok/x.mp4"), "_failed") is False
+    assert fail_dir_for_scan(fail_dir="_failed", exclude_fail_dir=True) == "_failed"
+    assert fail_dir_for_scan(fail_dir="_failed", exclude_fail_dir=False) == ""
+    assert fail_dir_for_scan(fail_dir="", exclude_fail_dir=True) == ""

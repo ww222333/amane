@@ -12,7 +12,7 @@
 | `REFRESH` | 扫描增删、注册 MediaFile、fan-out SCRAPE (`use_cache` 原样转发) | 移动文件、写 NFO |
 | `SCRAPE` | 联网聚合 → DB → Resource; `media_file_id` 只作查询输入 (番号 / oshash) 与回写关联 | 库内移动 / NFO |
 | `TRASH` | 扫描范围内的黑名单与过小视频, 移入 `.amane_trash` (物理移动, 不受 `move_mode`) | 整理正片、写 NFO、注册 MediaFile |
-| `ORGANIZE` | 范围内已有 Metadata 的 MediaFile 按路径模板落盘; Library.`move_mode` 与库级整理默认 (payload 可覆盖); 缺资源时 `acquire` 可出站 HTTP | 扫描磁盘、回收、运行爬虫、修改 Metadata、记录站点结果 |
+| `ORGANIZE` | 范围内已有 Metadata 的 MediaFile 按路径模板落盘; Library.`move_mode` 与库级整理默认 (payload 可覆盖 `write_nfo` / `copy_resources` / `trash_empty_source` / `move_to_fail_dir`); `trash_empty_source` 为真且移动成功后, 源目录递归无视频则整目录移入 `.amane_trash` (不碰库根); `move_to_fail_dir` 为真且库 `fail_dir` 非空时, 无 Metadata 的正片整夹移入该失败目录; 缺资源时 `acquire` 可出站 HTTP | 扫描磁盘、回收、运行爬虫、修改 Metadata、记录站点结果 |
 
 `CLEANUP` / `UPSCALE` 扫描 DB / Resource; `ACTOR_SCRAPE` 刮人物; `R18_IMPORT` 导入 dump. 上述类型均不执行影片落盘.
 
@@ -208,7 +208,7 @@ Metadata 是一等公民, CLEANUP **从不**因「无关联 MediaFile」删除 M
 
 **UPSCALE 例行任务**: 扫描全部 `Resource`, 对低质且未超分的就地超分; `limit` 限单次批量. 与 scrape 期急切双轨, 见上节.
 
-**RESCRAPE (滚动补刮)**: 与 `RefreshHandler` 同构的 fan-out — 批量任务只选目标并下发既有刮削, 重活不另写一套. `targets` (`metadata` / `actor`, 缺省仅 `metadata`) 每个已选项各自按 `updated_at ASC` 取 `limit` 条 (可选 `min_age_days` 门槛), 以 `priority=-1` 入队非 force 任务: 影片 → SCRAPE, 演员 → ACTOR_SCRAPE. 均复用 per-site raw 快照仅补缺失站点, 聚合阶段重放当前配置 — 因此同时承担「配置变更后再次运行生效」. 这与影片 SCRAPE 成功后的链式 ACTOR_SCRAPE 正交: 链式跳过 `Actor.raw` 已非空的演员; 滚动补刮会再入队已有档案. 同 `actor_id` 仍走入队互斥. **影片 content_type 不存表, 运行时推断**: `infer_content_type` — 有挂载文件传路径 (路径关键词 → 番号), 无文件只传番号文本 (未命中则欧美; 路径关键词类如里番 / 欧美目录名在无文件时不可推断).
+**RESCRAPE (滚动补刮)**: 与 `RefreshHandler` 同构的 fan-out — 批量任务只选目标并下发既有刮削, 重活不另写一套. `targets` (`metadata` / `actor`, 缺省仅 `metadata`) 每个已选项各自按 `updated_at ASC` 取 `limit` 条 (可选 `min_age_days` 门槛), 以 `priority=-1` 入队非 force 任务: 影片 → SCRAPE, 演员 → ACTOR_SCRAPE. 均复用 per-site raw 快照仅补缺失站点, 聚合阶段重放当前配置 — 因此同时承担「配置变更后再次运行生效」. 这与影片 SCRAPE 成功后的链式 ACTOR_SCRAPE 正交: 链式跳过 `Actor.raw` 已非空的演员; 滚动补刮会再入队已有档案. 同 `actor_id` 仍走入队互斥. **影片 content_type 不存表, 运行时推断**: `infer_content_type` — 有挂载文件传路径 (路径关键词 → 番号), 无文件只传番号文本 (未命中则未知; 路径关键词类如里番 / 欧美目录名在无文件时不可推断).
 
 Watcher、Cron 与 Feed 分属独立循环: 秒级反应、分钟级 routine、每源间隔的远程拉取. 合并到同一循环会互相拖高 latency, 或把 HTTP / RSS 纳入 cron.py.
 

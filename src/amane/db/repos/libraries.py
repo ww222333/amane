@@ -12,6 +12,7 @@ from ...library import (
     normalize_subtitle_extensions,
     resolve_ingest_cloud_path,
     validate_blacklist_pattern,
+    validate_fail_dir,
     validate_min_file_size,
     validate_trailer_pattern,
 )
@@ -70,12 +71,17 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         subtitle_template: str | None = None,
         subtitle_extensions: list[str] | None = None,
         write_nfo: bool = True,
+        trash_empty_source: bool = False,
+        fail_dir: str = "",
+        move_to_fail_dir: bool = False,
+        exclude_fail_dir: bool = True,
         copy_resources: list[DownloadableResource] | None = None,
         trailer_pattern: str | None = None,
         blacklist_patterns: list[str] | None = None,
         min_file_size: int = 0,
     ) -> Library:
         min_file_size = validate_min_file_size(min_file_size)
+        fail_dir = validate_fail_dir(fail_dir)
         cloud_path = resolve_ingest_cloud_path(ingest, cloud_path)
         video_template = validate_path_template(video_template)
         link_template = _path_template_or_none(normalize_link_template(link_template))
@@ -114,6 +120,10 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                     list(subtitle_extensions) if subtitle_extensions is not None else list(DEFAULT_SUBTITLE_EXTENSIONS)
                 ),
                 write_nfo=write_nfo,
+                trash_empty_source=trash_empty_source,
+                fail_dir=fail_dir,
+                move_to_fail_dir=move_to_fail_dir,
+                exclude_fail_dir=exclude_fail_dir,
                 copy_resources=list(copy_resources) if copy_resources is not None else list(DownloadableResource),
                 trailer_pattern=validate_trailer_pattern(
                     trailer_pattern if trailer_pattern is not None else DEFAULT_TRAILER_PATTERN
@@ -227,6 +237,14 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 )
             if "write_nfo" in updates:
                 lib.write_nfo = updates["write_nfo"]
+            if "trash_empty_source" in updates:
+                lib.trash_empty_source = updates["trash_empty_source"]
+            if "fail_dir" in updates:
+                lib.fail_dir = validate_fail_dir(updates["fail_dir"])
+            if "move_to_fail_dir" in updates:
+                lib.move_to_fail_dir = updates["move_to_fail_dir"]
+            if "exclude_fail_dir" in updates:
+                lib.exclude_fail_dir = updates["exclude_fail_dir"]
             if "copy_resources" in updates:
                 resources = updates["copy_resources"]
                 lib.copy_resources = resources if resources is not None else []

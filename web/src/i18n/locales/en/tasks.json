@@ -175,6 +175,14 @@
         "label": "Write NFO",
         "description": "Overrides library setting"
       },
+      "trash_empty_source": {
+        "label": "Trash empty source folders",
+        "description": "Overrides library setting; after a successful move, trash the source folder if it has no videos left"
+      },
+      "move_to_fail_dir": {
+        "label": "Move to failure directory",
+        "description": "Overrides library setting; move whole folders of videos without metadata into the library failure directory"
+      },
       "copy_resources": {
         "label": "Copy on organize",
         "description": "Overrides library setting",
@@ -230,7 +238,8 @@
           "western": "Western",
           "fc2": "FC2",
           "amateur": "Amateur",
-          "hentai": "Hentai"
+          "hentai": "Hentai",
+          "unknown": "Unknown"
         }
       },
       "use_cache": {

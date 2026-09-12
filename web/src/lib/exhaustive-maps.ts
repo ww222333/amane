@@ -58,6 +58,7 @@ export const CONTENT_TYPES = exhaustiveTuple<ContentType>()(
   "fc2",
   "amateur",
   "hentai",
+  "unknown",
 );
 
 export const MOSAICS = exhaustiveTuple<Mosaic>()("censored", "uncensored", "cracked", "leaked");

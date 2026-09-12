@@ -350,8 +350,7 @@
         },
         "$": {
           "sites": {
-            "label": "站点",
-            "description": "该类型刮削时请求的站点顺序",
+            "label": "",
             "options": {
               "airav": "airav",
               "avsox": "avsox",
@@ -413,7 +412,7 @@
           },
           "prefixes": {
             "label": "自定义前缀",
-            "description": "番号匹配此前缀时优先走本类型路由（如 MIDV、ABC-）；长前缀优先"
+            "description": "匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先"
           }
         }
       }

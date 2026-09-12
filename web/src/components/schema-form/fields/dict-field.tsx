@@ -252,11 +252,9 @@ export function DictField({
 
                   {entries.map(([key]) => (
                     <Tabs.Panel key={key} value={key} p="md">
-                      <Group justify="space-between" mb="sm">
-                        <Text size="sm" fw={500}>
-                          {getKeyLabel(key)}
-                        </Text>
-                        {canModifyKeys && (
+                      {/* frozen-keys 时标签页已标明条目, 不再重复标题 */}
+                      {canModifyKeys && (
+                        <Group justify="flex-end" mb="sm">
                           <ActionIcon
                             variant="subtle"
                             color="gray"
@@ -266,8 +264,8 @@ export function DictField({
                           >
                             <IconTrash size={14} />
                           </ActionIcon>
-                        )}
-                      </Group>
+                        </Group>
+                      )}
 
                       {isObject(valueSchema) && valueSchema.properties ? (
                         <DictEntryScope

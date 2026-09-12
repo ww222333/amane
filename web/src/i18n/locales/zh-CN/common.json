@@ -60,6 +60,10 @@
     "zh-CN": "简体中文",
     "en": "English"
   },
+  "form": {
+    "commaSeparated": "逗号分隔，例如 MIDV, ABC-",
+    "oneValuePerLine": "每行一项"
+  },
   "pagination": {
     "next": "下一页",
     "totalItems": "(共 {{count}} 条)",

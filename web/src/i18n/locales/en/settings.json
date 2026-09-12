@@ -350,8 +350,7 @@
         },
         "$": {
           "sites": {
-            "label": "Sites",
-            "description": "Ordered sources requested for this content type",
+            "label": "",
             "options": {
               "airav": "airav",
               "avsox": "avsox",
@@ -413,7 +412,7 @@
           },
           "prefixes": {
             "label": "Custom prefixes",
-            "description": "Numbers matching these prefixes prefer this type route (e.g. MIDV, ABC-); longer prefixes win"
+            "description": "IDs matching these prefixes prefer this type route (e.g. MIDV, ABC-); longer prefixes win"
           }
         }
       }

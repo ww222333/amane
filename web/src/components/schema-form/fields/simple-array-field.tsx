@@ -2,6 +2,7 @@ import { ActionIcon, Group, ScrollArea, Textarea, TextInput } from "@mantine/cor
 import { IconPlus } from "@tabler/icons-react";
 import type { AnyFieldApi } from "@tanstack/react-form";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { ArrayFieldProps, JSONSchemaObject } from "../schema";
 import { isOrdered } from "../schema";
 import { useFieldDomId } from "./dict-entry-form";
@@ -19,6 +20,7 @@ export function SimpleArrayField({
   const id = useFieldDomId(name);
   const ordered = isOrdered(schema);
   const long = schema["x-long"] === true;
+  const { t } = useTranslation("common");
 
   return (
     <form.Field name={name}>
@@ -39,7 +41,7 @@ export function SimpleArrayField({
                 .filter(Boolean);
               field.handleChange(parts);
             }}
-            placeholder="One value per line"
+            placeholder={t("form.oneValuePerLine")}
             rows={8}
           />
         ) : (
@@ -54,7 +56,7 @@ export function SimpleArrayField({
                 .filter(Boolean);
               field.handleChange(parts);
             }}
-            placeholder="Comma-separated values"
+            placeholder={t("form.commaSeparated")}
           />
         );
 

@@ -60,6 +60,10 @@
     "zh-CN": "简体中文",
     "en": "English"
   },
+  "form": {
+    "commaSeparated": "Comma-separated, e.g. MIDV, ABC-",
+    "oneValuePerLine": "One value per line"
+  },
   "pagination": {
     "next": "Next",
     "totalItems": "({{count}} total)",

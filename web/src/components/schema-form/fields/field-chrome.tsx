@@ -84,18 +84,24 @@ export function FieldChrome({
   // Input via context. Select / NumberInput nest their own wrapper (so they
   // never see it), and Button / Checkbox groups are not Input at all — those
   // fields would sit flush against the description.
+  // 空 label 且无 description 时不画标题行 (接近 bare, 仍保留错误提示).
+  const showHeading = Boolean(label) || Boolean(description);
   return (
     <Stack gap="xs" py="xs">
-      <Stack gap={2}>
-        <Input.Label htmlFor={htmlFor} size="sm" fw={500}>
-          {label}
-        </Input.Label>
-        {description && (
-          <Text size="xs" c="dimmed">
-            {description}
-          </Text>
-        )}
-      </Stack>
+      {showHeading && (
+        <Stack gap={2}>
+          {label ? (
+            <Input.Label htmlFor={htmlFor} size="sm" fw={500}>
+              {label}
+            </Input.Label>
+          ) : null}
+          {description && (
+            <Text size="xs" c="dimmed">
+              {description}
+            </Text>
+          )}
+        </Stack>
+      )}
       {children}
       {error && <Input.Error size="xs">{error}</Input.Error>}
     </Stack>

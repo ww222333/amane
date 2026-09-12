@@ -240,12 +240,19 @@ class ContentRouteEntry(BaseModel):
 
     sites: list[str] = Field(
         default_factory=list,
+        # 表单不单独显示「站点」标题, 与旧版列表布局一致; 翻译里 label 置空.
+        title="",
+        description="",
         json_schema_extra=site_list_value_schema(FILM_METADATA_SITES, ordered=True),
     )
     """该类型实际请求的站点; field_priority 只在表内重排."""
 
-    prefixes: list[str] = Field(default_factory=list)
-    """番号匹配此前缀时优先归入本类型 (长前缀优先). 例: MIDV / ABC-."""
+    prefixes: list[str] = Field(
+        default_factory=list,
+        title="自定义前缀",
+        description="匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先",
+    )
+    """匹配此前缀时优先归入本类型 (长前缀优先). 例: MIDV / ABC-."""
 
     @model_validator(mode="before")
     @classmethod

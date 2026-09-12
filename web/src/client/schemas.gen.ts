@@ -1076,7 +1076,8 @@ export const ContentRouteEntrySchema = {
                 ]
             },
             type: 'array',
-            title: 'Sites',
+            title: '',
+            description: '',
             'x-ordered': true
         },
         prefixes: {
@@ -1084,7 +1085,8 @@ export const ContentRouteEntrySchema = {
                 type: 'string'
             },
             type: 'array',
-            title: 'Prefixes'
+            title: '自定义前缀',
+            description: '匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先'
         }
     },
     type: 'object',

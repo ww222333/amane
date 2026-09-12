@@ -589,12 +589,11 @@ export type CommentUpdateRequest = {
  * 单个内容类型的路由: 站点名单 + 可选自定义前缀.
  */
 export type ContentRouteEntry = {
-    /**
-     * Sites
-     */
     sites?: Array<'airav' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
     /**
-     * Prefixes
+     * 自定义前缀
+     *
+     * 匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先
      */
     prefixes?: Array<string>;
 };

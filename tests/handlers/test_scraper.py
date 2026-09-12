@@ -266,6 +266,32 @@ class TestContentRoutesFiltering:
         assert "No eligible crawlers" in result.error
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_custom_prefix_overrides_content_type_route(self, repo: Repository, resource_store):
+        """番号命中自定义前缀时改走对应类型的站点名单."""
+        from amane.config.manager import ContentRouteEntry
+
+        available = {
+            "javdb": MockCrawler(),
+            "iqqtv": MockCrawler(),
+        }
+        factory = RecordingFactory(available)
+        config = _config_with(
+            {
+                ContentType.CENSORED: ContentRouteEntry(sites=[SiteName.JAVDB], prefixes=[]),
+                ContentType.CHINESE: ContentRouteEntry(sites=[SiteName.IQQTV], prefixes=["MIDV"]),
+            }
+        )
+        h = ScrapeHandler(repo=repo, factory=factory, resource_store=resource_store, pipeline_config=config)
+
+        media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
+        await h.handle(
+            ScrapePayload(media_file_id=media.id, number="MIDV-123", content_type=ContentType.CENSORED)
+        )
+
+        assert factory.requested == [SiteName.IQQTV]
+        assert SiteName.JAVDB not in factory.requested
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_prefer_outside_route_not_requested(self, repo: Repository, resource_store):
         """prefer 不在 route 内的站不会被 get_crawlers 请求."""
         available = {

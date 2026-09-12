@@ -187,7 +187,7 @@ class PluginManager:
         known = {descriptor.id: descriptor for descriptor in self.descriptors()}
         for content_type, route in hot.scraping.content_routes.items():
             field = f"scraping.content_routes.{content_type}"
-            for source_id in route:
+            for source_id in route.sites:
                 descriptor = self._descriptor_for_route(
                     str(source_id), known, require_available=require_available, field=field
                 )

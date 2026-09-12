@@ -12,7 +12,9 @@ from amane.parsing import (
     infer_content_type,
     is_amateur,
     is_uncensored,
+    match_content_type_prefix,
     parse_file_info,
+    resolve_content_type,
     split_number,
 )
 
@@ -511,3 +513,33 @@ def test_mosaic_canonical_filename_roundtrip(source: str, canonical: str) -> Non
     assert info.mosaic == canonical
     again = parse_file_info(f"MIDV-123-{canonical}.mp4")
     assert again.mosaic == canonical
+
+
+class TestContentTypePrefixOverride:
+    def test_match_longest_prefix_wins(self) -> None:
+        prefixes = {
+            ContentType.CHINESE: ["MD"],
+            ContentType.AMATEUR: ["MDV", "MIDV"],
+        }
+        assert match_content_type_prefix("MIDV-123", prefixes) == ContentType.AMATEUR
+        assert match_content_type_prefix("MD-001", prefixes) == ContentType.CHINESE
+
+    def test_match_allows_separator_or_digit_boundary(self) -> None:
+        prefixes = {ContentType.CENSORED: ["MIDV"]}
+        assert match_content_type_prefix("MIDV-123", prefixes) == ContentType.CENSORED
+        assert match_content_type_prefix("MIDV123", prefixes) == ContentType.CENSORED
+        assert match_content_type_prefix("MIDVX-1", prefixes) is None
+
+    def test_resolve_overrides_builtin(self) -> None:
+        # MIDV 内置为有码; 自定义到国产后应覆盖
+        assert infer_content_type("MIDV-123") == ContentType.CENSORED
+        assert (
+            resolve_content_type("MIDV-123", prefixes_by_type={ContentType.CHINESE: ["MIDV"]})
+            == ContentType.CHINESE
+        )
+
+    def test_resolve_keeps_builtin_when_no_match(self) -> None:
+        assert (
+            resolve_content_type("MIDV-123", prefixes_by_type={ContentType.CHINESE: ["ABC"]})
+            == ContentType.CENSORED
+        )

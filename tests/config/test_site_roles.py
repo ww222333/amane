@@ -29,11 +29,19 @@ class TestSiteCapabilitySchema:
     def test_film_content_routes_value_items_enum(self):
         schema = ScrapingConfig.model_json_schema()
         props = schema["properties"]["content_routes"]["additionalProperties"]
-        assert set(props["items"]["enum"]) == set(FILM_METADATA_SITES)
-        assert props.get("x-ordered") is True
-        assert SiteName.MINNANO not in props["items"]["enum"]
-        assert SiteName.WIKIPEDIA not in props["items"]["enum"]
-        assert SiteName.GFRIENDS not in props["items"]["enum"]
+        # $ref or inline object with sites + prefixes
+        if "$ref" in props:
+            ref = props["$ref"].rsplit("/", 1)[-1]
+            entry = schema["$defs"][ref]
+        else:
+            entry = props
+        sites = entry["properties"]["sites"]
+        assert set(sites["items"]["enum"]) == set(FILM_METADATA_SITES)
+        assert sites.get("x-ordered") is True
+        assert "prefixes" in entry["properties"]
+        assert SiteName.MINNANO not in sites["items"]["enum"]
+        assert SiteName.WIKIPEDIA not in sites["items"]["enum"]
+        assert SiteName.GFRIENDS not in sites["items"]["enum"]
 
     def test_film_field_priority_value_items_enum(self):
         schema = ScrapingConfig.model_json_schema()

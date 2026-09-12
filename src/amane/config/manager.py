@@ -45,6 +45,10 @@ LANG_METADATA_FIELD_SET: frozenset[MetadataField] = frozenset(
 # json_schema_extra 需要 JsonValue 兼容类型, 使用 list[Any] 避免 pyright invariance 问题
 _SITES_WITH_API_TOKEN: list[Any] = [SiteName.THEPORNDB]
 
+def _site_value(site: Any) -> str:
+    return str(site)
+
+
 #: 各内容类型默认有序路由 (资格真值 + 该类型默认字段优先级).
 _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
     ContentType.CENSORED: [
@@ -231,6 +235,33 @@ class SiteConfig(BaseModel):
     """req/s. 全局 network.rate_limits 有此站点域名时全局优先."""
 
 
+class ContentRouteEntry(BaseModel):
+    """单个内容类型的路由: 站点名单 + 可选自定义前缀."""
+
+    sites: list[str] = Field(
+        default_factory=list,
+        json_schema_extra=site_list_value_schema(FILM_METADATA_SITES, ordered=True),
+    )
+    """该类型实际请求的站点; field_priority 只在表内重排."""
+
+    prefixes: list[str] = Field(default_factory=list)
+    """番号匹配此前缀时优先归入本类型 (长前缀优先). 例: MIDV / ABC-."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _coerce_legacy_site_list(cls, v: Any) -> Any:
+        """旧配置 `censored = ["javdb", ...]` 升为 {sites, prefixes}."""
+        if isinstance(v, list):
+            return {"sites": [_site_value(s) for s in v], "prefixes": []}
+        return v
+
+
+def _default_content_routes() -> dict[ContentType, ContentRouteEntry]:
+    return {
+        ct: ContentRouteEntry(sites=[str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])]) for ct in ContentType
+    }
+
+
 class ScrapingConfig(BaseModel):
     download_resources: list[DownloadableResource] = Field(
         default_factory=lambda: [r for r in DownloadableResource if r != DownloadableResource.trailer],
@@ -247,16 +278,11 @@ class ScrapingConfig(BaseModel):
 
     jpeg_quality: int = Field(default=95, ge=50, le=100, json_schema_extra={"x-hidden": True})
 
-    content_routes: dict[ContentType, list[str]] = Field(
-        default_factory=lambda: {ct: [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])] for ct in ContentType},
-        json_schema_extra=kv(
-            {
-                "x-frozen-keys": True,
-                **{f"v-{k}": v for k, v in site_list_value_schema(FILM_METADATA_SITES, ordered=True).items()},
-            }
-        ),
+    content_routes: dict[ContentType, ContentRouteEntry] = Field(
+        default_factory=_default_content_routes,
+        json_schema_extra={"x-frozen-keys": True},
     )
-    """该类型实际请求的站点 ⊆ 此表; field_priority 只在表内重排."""
+    """按内容类型配置站点名单与自定义前缀; field_priority 只在站点名单内重排."""
 
     field_priority: dict[MetadataField, list[str]] = Field(
         default_factory=dict,
@@ -295,7 +321,11 @@ class ScrapingConfig(BaseModel):
     @classmethod
     def _complete_content_routes(cls, v: Any) -> Any:
         return _complete_frozen_dict(
-            v, {ct: [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])] for ct in ContentType}
+            v,
+            {
+                ct: {"sites": [str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])], "prefixes": []}
+                for ct in ContentType
+            },
         )
 
     @field_validator("field_language", mode="before")
@@ -320,11 +350,13 @@ class ScrapingConfig(BaseModel):
 
     @field_validator("content_routes")
     @classmethod
-    def _film_content_routes(cls, v: dict[ContentType, list[str]]) -> dict[ContentType, list[str]]:
+    def _film_content_routes(cls, v: dict[ContentType, ContentRouteEntry]) -> dict[ContentType, ContentRouteEntry]:
         allowed = frozenset(FILM_METADATA_SITES)
-        for ct, sites in v.items():
-            assert_sites_allowed(sites, allowed, field=f"content_routes.{ct}", allow_external=True)
-        return v
+        out: dict[ContentType, ContentRouteEntry] = {}
+        for ct, entry in v.items():
+            sites = assert_sites_allowed(entry.sites, allowed, field=f"content_routes.{ct}.sites", allow_external=True)
+            out[ct] = ContentRouteEntry(sites=sites, prefixes=_normalize_route_prefixes(entry.prefixes))
+        return out
 
     @model_validator(mode="before")
     @classmethod
@@ -380,10 +412,44 @@ class ScrapingConfig(BaseModel):
         order = [_site_value(s) for s in default_priority]
         routes = data.get("content_routes")
         if not isinstance(routes, dict):
-            routes = {ct: [str(s) for s in sites] for ct, sites in _DEFAULT_CONTENT_ROUTES.items()}
+            routes = {
+                ct: {"sites": [str(s) for s in sites], "prefixes": []} for ct, sites in _DEFAULT_CONTENT_ROUTES.items()
+            }
 
-        data["content_routes"] = {ct: _reorder_route(eligible, order) for ct, eligible in routes.items()}
+        rebuilt: dict[Any, Any] = {}
+        for ct, eligible in routes.items():
+            if isinstance(eligible, list):
+                sites, prefixes = eligible, []
+            elif isinstance(eligible, dict):
+                sites, prefixes = eligible.get("sites", []), eligible.get("prefixes", [])
+            else:
+                sites, prefixes = getattr(eligible, "sites", []), getattr(eligible, "prefixes", [])
+            rebuilt[ct] = {"sites": _reorder_route(list(sites), order), "prefixes": list(prefixes)}
+        data["content_routes"] = rebuilt
         return data
+
+    def route_sites(self, content_type: ContentType) -> list[str]:
+        entry = self.content_routes.get(content_type)
+        return list(entry.sites) if entry is not None else []
+
+    def route_prefixes(self) -> dict[ContentType, list[str]]:
+        return {ct: list(entry.prefixes) for ct, entry in self.content_routes.items() if entry.prefixes}
+
+
+def _normalize_route_prefixes(prefixes: list[str]) -> list[str]:
+    """去空白、去重保序; 允许用户写 MIDV 或 MIDV-."""
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in prefixes:
+        text = str(raw).strip()
+        if not text:
+            continue
+        key = text.upper()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(text)
+    return out
 
 
 def _validate_film_field_map(v: dict[MetadataField, list[str]], *, prefix: str) -> dict[MetadataField, list[str]]:
@@ -395,10 +461,6 @@ def _validate_film_field_map(v: dict[MetadataField, list[str]], *, prefix: str) 
         assert_sites_allowed(sites, allowed, field=f"{prefix}.{field}", allow_external=True)
         out[field] = sites
     return out
-
-
-def _site_value(site: Any) -> str:
-    return str(site)
 
 
 def _complete_frozen_dict(provided: Any, defaults: dict[str, Any]) -> Any:

@@ -12,7 +12,7 @@ from __future__ import annotations
 import contextlib
 import re
 import unicodedata
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -267,6 +267,46 @@ def extract_number(text: str, escape_strings: list[str] | None = None) -> str | 
 def infer_content_type(number: str, file_path: str | None = None) -> ContentType:
     """有挂载文件按路径, 否则按番号; 未命中已知形态则欧美."""
     return parse_file_info(file_path, text=number).content_type
+
+
+def match_content_type_prefix(
+    number: str,
+    prefixes_by_type: Mapping[ContentType, Sequence[str]],
+) -> ContentType | None:
+    """自定义前缀命中则返回对应类型; 多命中取最长前缀. 未命中返回 None.
+
+    匹配规则 (大小写不敏感): 规范化前缀去掉尾部分隔符后, 番号以此开头, 且后续为空 /
+    分隔符 (`-_.`) / 数字 (允许 ``MIDV123`` / ``MIDV-123``), 避免 ``MIDV`` 误伤 ``MIDVX``.
+    """
+    upper = number.strip().upper()
+    if not upper:
+        return None
+    best: tuple[int, ContentType] | None = None
+    for content_type, prefixes in prefixes_by_type.items():
+        for raw in prefixes:
+            prefix = str(raw).strip().upper().rstrip("-_. ")
+            if not prefix or not upper.startswith(prefix):
+                continue
+            rest = upper[len(prefix) :]
+            if rest and rest[0] not in "-_." and not rest[0].isdigit():
+                continue
+            if best is None or len(prefix) > best[0]:
+                best = (len(prefix), content_type)
+    return best[1] if best is not None else None
+
+
+def resolve_content_type(
+    number: str,
+    file_path: str | None = None,
+    *,
+    prefixes_by_type: Mapping[ContentType, Sequence[str]] | None = None,
+) -> ContentType:
+    """内置规则推断后, 自定义前缀命中则覆盖 (优先走对应路由)."""
+    inferred = infer_content_type(number, file_path)
+    if not prefixes_by_type:
+        return inferred
+    matched = match_content_type_prefix(number, prefixes_by_type)
+    return matched if matched is not None else inferred
 
 
 def detect_cd(filename: str | Path) -> int | None:

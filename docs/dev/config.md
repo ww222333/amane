@@ -68,7 +68,9 @@ Cold 配置同样加到 `manager.py::ColdSettings`, 无需 UI — 只通过 `AMA
 
 ## `scraping` 影片路由 (Hot)
 
-`content_routes` 是按内容类型的**有序站点链**: 资格真值 + 该类型默认字段顺序. 该类型实际请求的站点 ⊆ 此表, 空表则该类型刮削直接失败. 关闭某类型刮削时须将该项设置为空列表; 不允许删除 key.
+`content_routes` 每项为 `{sites, prefixes}`. `sites` 是该类型的**有序站点链** (资格真值 + 默认字段顺序); 实际请求的站点 ⊆ `sites`, 空 `sites` 则该类型刮削直接失败. 关闭某类型刮削时须将 `sites` 设为空列表; 不允许删除 key. 旧配置若直接写站点列表, 校验升为 `{sites, prefixes: []}`.
+
+`prefixes` 是该类型的自定义番号前缀. 刮削时若番号命中某类型前缀, 覆盖 payload 的 `content_type` 并采用该类型 `sites` (多命中取最长前缀; 边界规则见 `match_content_type_prefix`).
 
 `field_priority` 是稀疏字段例外: 只写需要提前尝试的站. 编译时与该类型路由求交后前置, 其余路由站点保序回退 (`aggregate.compile_priority`). 不在该类型路由中的站无效, 也不额外发请求.
 

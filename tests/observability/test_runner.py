@@ -23,7 +23,7 @@ async def test_offline_record_javdb_search_miss(tmp_path: Path):
 
     hot = HotSettings()
     for ct in hot.scraping.content_routes:
-        hot.scraping.content_routes[ct] = [SiteName.JAVDB]
+        hot.scraping.content_routes[ct].sites = [SiteName.JAVDB]
 
     task = Task(
         id=7,

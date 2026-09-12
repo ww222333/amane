@@ -206,7 +206,7 @@ class TestScrapingPriorityMigration:
                 "content_routes": {"censored": ["javdb", "dmm", "javbus"]},
             }
         )
-        assert cfg.content_routes[ContentType.CENSORED] == [SiteName.JAVBUS, SiteName.JAVDB, SiteName.DMM]
+        assert cfg.content_routes[ContentType.CENSORED].sites == [SiteName.JAVBUS, SiteName.JAVDB, SiteName.DMM]
 
     def test_strips_empty_field_priority(self):
         cfg = ScrapingConfig.model_validate({"field_priority": {"title": [], "plot": ["dmm"]}})
@@ -220,19 +220,27 @@ class TestScrapingPriorityMigration:
 
     def test_no_default_priority_keeps_route_order(self):
         cfg = ScrapingConfig.model_validate({"content_routes": {"censored": ["javbus", "javdb"]}})
-        assert cfg.content_routes[ContentType.CENSORED] == [SiteName.JAVBUS, SiteName.JAVDB]
+        assert cfg.content_routes[ContentType.CENSORED].sites == [SiteName.JAVBUS, SiteName.JAVDB]
         assert set(cfg.content_routes) == set(ContentType)
-        assert cfg.content_routes[ContentType.FC2] == ScrapingConfig().content_routes[ContentType.FC2]
+        assert cfg.content_routes[ContentType.FC2].sites == ScrapingConfig().content_routes[ContentType.FC2].sites
 
     def test_default_routes_type_specific_heads(self):
         routes = ScrapingConfig().content_routes
-        assert routes[ContentType.AMATEUR][0] == SiteName.MGSTAGE
-        assert routes[ContentType.CHINESE][0] == SiteName.IQQTV
-        assert routes[ContentType.HENTAI][0] == SiteName.GETCHU
-        assert routes[ContentType.WESTERN][0] == SiteName.THEPORNDB
-        assert SiteName.AVSOX in routes[ContentType.UNCENSORED]
-        assert SiteName.FC2PPVDB in routes[ContentType.FC2]
-        assert SiteName.OFFICIAL in routes[ContentType.CENSORED]
+        assert routes[ContentType.AMATEUR].sites[0] == SiteName.MGSTAGE
+        assert routes[ContentType.CHINESE].sites[0] == SiteName.IQQTV
+        assert routes[ContentType.HENTAI].sites[0] == SiteName.GETCHU
+        assert routes[ContentType.WESTERN].sites[0] == SiteName.THEPORNDB
+        assert SiteName.AVSOX in routes[ContentType.UNCENSORED].sites
+        assert SiteName.FC2PPVDB in routes[ContentType.FC2].sites
+        assert SiteName.OFFICIAL in routes[ContentType.CENSORED].sites
+
+    def test_content_route_prefixes_override_kept(self):
+        cfg = ScrapingConfig.model_validate(
+            {"content_routes": {"censored": {"sites": ["javdb"], "prefixes": ["ABC", "abc", " MIDV "]}}}
+        )
+        assert cfg.content_routes[ContentType.CENSORED].sites == [SiteName.JAVDB]
+        assert cfg.content_routes[ContentType.CENSORED].prefixes == ["ABC", "MIDV"]
+        assert cfg.route_prefixes()[ContentType.CENSORED] == ["ABC", "MIDV"]
 
 
 class TestFrozenKeyDictCompleteness:
@@ -276,14 +284,19 @@ class TestFrozenKeyDictCompleteness:
         cfg = ScrapingConfig.model_validate({"content_routes": payload})
         defaults = ScrapingConfig()
         assert set(cfg.content_routes) == set(ContentType)
-        expected = defaults.content_routes[ContentType.CENSORED] if censored is None else censored
-        assert cfg.content_routes[ContentType.CENSORED] == expected
-        assert cfg.content_routes[ContentType.FC2] == defaults.content_routes[ContentType.FC2]
+        expected = (
+            defaults.content_routes[ContentType.CENSORED].sites if censored is None else censored
+        )
+        assert cfg.content_routes[ContentType.CENSORED].sites == expected
+        assert cfg.content_routes[ContentType.FC2].sites == defaults.content_routes[ContentType.FC2].sites
 
     def test_content_routes_empty_list_kept(self):
         cfg = ScrapingConfig.model_validate({"content_routes": {"fc2": []}})
-        assert cfg.content_routes[ContentType.FC2] == []
-        assert cfg.content_routes[ContentType.CENSORED] == ScrapingConfig().content_routes[ContentType.CENSORED]
+        assert cfg.content_routes[ContentType.FC2].sites == []
+        assert (
+            cfg.content_routes[ContentType.CENSORED].sites
+            == ScrapingConfig().content_routes[ContentType.CENSORED].sites
+        )
 
     @pytest.mark.parametrize(
         ("payload", "title_lang"),
@@ -487,8 +500,8 @@ class TestConfigManagerLoad:
         assert scraping.site_config[SiteName.JAVDB].use_proxy is False
         assert scraping.site_config[SiteName.GFRIENDS].use_proxy is True
         assert set(scraping.content_routes) == set(ContentType)
-        assert scraping.content_routes[ContentType.CENSORED] == [SiteName.JAVBUS]
-        assert scraping.content_routes[ContentType.FC2] == defaults.content_routes[ContentType.FC2]
+        assert scraping.content_routes[ContentType.CENSORED].sites == [SiteName.JAVBUS]
+        assert scraping.content_routes[ContentType.FC2].sites == defaults.content_routes[ContentType.FC2].sites
         assert set(scraping.field_language) == set(defaults.field_language)
         assert scraping.field_language[MetadataField.TITLE] == Language.JP
         assert scraping.field_language[MetadataField.PLOT] == Language.ZH_CN

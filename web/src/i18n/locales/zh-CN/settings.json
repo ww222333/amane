@@ -338,7 +338,7 @@
       },
       "content_routes": {
         "label": "类型路由",
-        "description": "按影片类型指定来源站点和默认优先级",
+        "description": "按影片类型指定来源站点、默认优先级，以及自定义番号前缀",
         "options": {
           "censored": "有码",
           "uncensored": "无码",
@@ -349,35 +349,9 @@
           "hentai": "里番"
         },
         "$": {
-          "options": {
-            "airav": "airav",
-            "avsox": "avsox",
-            "dahlia": "dahlia",
-            "dmm": "dmm",
-            "faleno": "faleno",
-            "fc2": "fc2",
-            "fc2club": "fc2club",
-            "fc2ppvdb": "fc2ppvdb",
-            "freejavbt": "freejavbt",
-            "getchu": "getchu",
-            "gfriends": "gfriends",
-            "giga": "giga",
-            "iqqtv": "iqqtv",
-            "jav321": "jav321",
-            "javbus": "javbus",
-            "javdb": "javdb",
-            "javlibrary": "javlibrary",
-            "kin8": "kin8",
-            "mgstage": "mgstage",
-            "minnano": "minnano",
-            "official": "official",
-            "prestige": "prestige",
-            "r18dev": "r18dev",
-            "theporndb": "theporndb",
-            "wikipedia": "wikipedia",
-            "xcity": "xcity"
-          },
-          "$": {
+          "sites": {
+            "label": "站点",
+            "description": "该类型刮削时请求的站点顺序",
             "options": {
               "airav": "airav",
               "avsox": "avsox",
@@ -405,7 +379,41 @@
               "theporndb": "theporndb",
               "wikipedia": "wikipedia",
               "xcity": "xcity"
+            },
+            "$": {
+              "options": {
+                "airav": "airav",
+                "avsox": "avsox",
+                "dahlia": "dahlia",
+                "dmm": "dmm",
+                "faleno": "faleno",
+                "fc2": "fc2",
+                "fc2club": "fc2club",
+                "fc2ppvdb": "fc2ppvdb",
+                "freejavbt": "freejavbt",
+                "getchu": "getchu",
+                "gfriends": "gfriends",
+                "giga": "giga",
+                "iqqtv": "iqqtv",
+                "jav321": "jav321",
+                "javbus": "javbus",
+                "javdb": "javdb",
+                "javlibrary": "javlibrary",
+                "kin8": "kin8",
+                "mgstage": "mgstage",
+                "minnano": "minnano",
+                "official": "official",
+                "prestige": "prestige",
+                "r18dev": "r18dev",
+                "theporndb": "theporndb",
+                "wikipedia": "wikipedia",
+                "xcity": "xcity"
+              }
             }
+          },
+          "prefixes": {
+            "label": "自定义前缀",
+            "description": "番号匹配此前缀时优先走本类型路由（如 MIDV、ABC-）；长前缀优先"
           }
         }
       }

@@ -11,6 +11,7 @@ from ..db.models import TaskType
 from ..enums import ActorGender, MetadataField
 from ..media import materialize_images
 from ..observability import current
+from ..parsing import match_content_type_prefix
 from ._common import ensure_oshash, finalize_media_file
 from .models import ActorScrapePayload, CacheKind, ScrapePayload, ScrapeResult
 from .protocol import FollowupTask, TaskHandler, TaskResult
@@ -60,7 +61,11 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
     async def handle(self, payload: ScrapePayload) -> TaskResult[ScrapeResult]:
         bind_contextvars(number=payload.number)
 
+        # 自定义前缀命中则优先覆盖 content_type (走对应类型路由).
         content_type = payload.content_type
+        matched = match_content_type_prefix(payload.number, self._config.scraping.route_prefixes())
+        if matched is not None:
+            content_type = matched
         progress_total = len(SCALAR_FIELDS) + _PROGRESS_POST_STEPS
         rec = current()
 
@@ -71,7 +76,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             rec.write_raw_cache(db_data.raw)
 
         # 校验 content_type 路由; 无资格站点则失败.
-        route = self._config.scraping.content_routes.get(content_type)
+        route = self._config.scraping.route_sites(content_type)
         if not route:
             rec.warning("no eligible crawlers for content type", content_type=content_type)
             return TaskResult(success=False, error=f"No eligible crawlers for content type {content_type}")
@@ -96,7 +101,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             payload.number,
             file.path if file else None,
             file_hash,
-            payload.content_type,
+            content_type,
         )
 
         field_priority = compile_priority(

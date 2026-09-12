@@ -584,6 +584,22 @@ export type CommentUpdateRequest = {
 };
 
 /**
+ * ContentRouteEntry
+ *
+ * 单个内容类型的路由: 站点名单 + 可选自定义前缀.
+ */
+export type ContentRouteEntry = {
+    /**
+     * Sites
+     */
+    sites?: Array<'airav' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+    /**
+     * Prefixes
+     */
+    prefixes?: Array<string>;
+};
+
+/**
  * ContentType
  */
 export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai';
@@ -2787,7 +2803,7 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in ContentType]?: ContentRouteEntry;
     };
     /**
      * Field Priority

@@ -1044,6 +1044,54 @@ export const CommentUpdateRequestSchema = {
     title: 'CommentUpdateRequest'
 } as const;
 
+export const ContentRouteEntrySchema = {
+    properties: {
+        sites: {
+            items: {
+                type: 'string',
+                enum: [
+                    'airav',
+                    'avsox',
+                    'dahlia',
+                    'dmm',
+                    'faleno',
+                    'fc2',
+                    'fc2club',
+                    'fc2ppvdb',
+                    'freejavbt',
+                    'getchu',
+                    'giga',
+                    'iqqtv',
+                    'jav321',
+                    'javbus',
+                    'javdb',
+                    'javlibrary',
+                    'kin8',
+                    'mgstage',
+                    'official',
+                    'prestige',
+                    'r18dev',
+                    'theporndb',
+                    'xcity'
+                ]
+            },
+            type: 'array',
+            title: 'Sites',
+            'x-ordered': true
+        },
+        prefixes: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Prefixes'
+        }
+    },
+    type: 'object',
+    title: 'ContentRouteEntry',
+    description: '单个内容类型的路由: 站点名单 + 可选自定义前缀.'
+} as const;
+
 export const ContentTypeSchema = {
     type: 'string',
     enum: [
@@ -2112,46 +2160,67 @@ export const HotSettingsSchema = {
                 poster_crop_skip_ratio: 0.9,
                 jpeg_quality: 95,
                 content_routes: {
-                    amateur: [
-                        'mgstage',
-                        'dmm',
-                        'javdb',
-                        'javbus'
-                    ],
-                    censored: [
-                        'dmm',
-                        'javdb',
-                        'javbus',
-                        'official'
-                    ],
-                    chinese: [
-                        'iqqtv',
-                        'javdb',
-                        'airav',
-                        'freejavbt'
-                    ],
-                    fc2: [
-                        'javdb',
-                        'fc2ppvdb',
-                        'fc2',
-                        'freejavbt'
-                    ],
-                    hentai: [
-                        'getchu',
-                        'dmm',
-                        'javdb'
-                    ],
-                    uncensored: [
-                        'javdb',
-                        'javbus',
-                        'avsox',
-                        'freejavbt'
-                    ],
-                    western: [
-                        'theporndb',
-                        'javdb',
-                        'freejavbt'
-                    ]
+                    amateur: {
+                        prefixes: [],
+                        sites: [
+                            'mgstage',
+                            'dmm',
+                            'javdb',
+                            'javbus'
+                        ]
+                    },
+                    censored: {
+                        prefixes: [],
+                        sites: [
+                            'dmm',
+                            'javdb',
+                            'javbus',
+                            'official'
+                        ]
+                    },
+                    chinese: {
+                        prefixes: [],
+                        sites: [
+                            'iqqtv',
+                            'javdb',
+                            'airav',
+                            'freejavbt'
+                        ]
+                    },
+                    fc2: {
+                        prefixes: [],
+                        sites: [
+                            'javdb',
+                            'fc2ppvdb',
+                            'fc2',
+                            'freejavbt'
+                        ]
+                    },
+                    hentai: {
+                        prefixes: [],
+                        sites: [
+                            'getchu',
+                            'dmm',
+                            'javdb'
+                        ]
+                    },
+                    uncensored: {
+                        prefixes: [],
+                        sites: [
+                            'javdb',
+                            'javbus',
+                            'avsox',
+                            'freejavbt'
+                        ]
+                    },
+                    western: {
+                        prefixes: [],
+                        sites: [
+                            'theporndb',
+                            'javdb',
+                            'freejavbt'
+                        ]
+                    }
                 },
                 field_priority: {},
                 field_blacklist: {},
@@ -5617,36 +5686,7 @@ export const ScrapingConfigSchema = {
         },
         content_routes: {
             additionalProperties: {
-                items: {
-                    type: 'string',
-                    enum: [
-                        'airav',
-                        'avsox',
-                        'dahlia',
-                        'dmm',
-                        'faleno',
-                        'fc2',
-                        'fc2club',
-                        'fc2ppvdb',
-                        'freejavbt',
-                        'getchu',
-                        'giga',
-                        'iqqtv',
-                        'jav321',
-                        'javbus',
-                        'javdb',
-                        'javlibrary',
-                        'kin8',
-                        'mgstage',
-                        'official',
-                        'prestige',
-                        'r18dev',
-                        'theporndb',
-                        'xcity'
-                    ]
-                },
-                type: 'array',
-                'x-ordered': true
+                $ref: '#/components/schemas/ContentRouteEntry'
             },
             propertyNames: {
                 $ref: '#/components/schemas/ContentType'

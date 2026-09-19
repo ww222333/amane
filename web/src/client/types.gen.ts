@@ -2300,7 +2300,7 @@ export type OrganizeSubmission = {
     /**
      * Trash Empty Source
      *
-     * 覆盖 Library.trash_empty_source; None 沿用库设置. 为真且移动成功后源目录无视频则整目录入 .amane_trash
+     * 覆盖 Library.trash_empty_source; None 沿用库设置. 为真则整理后全库扫描, 递归无视频的目录整夹入 .amane_trash (不碰库根 / 回收站 / 刮削失败输出目录)
      */
     trash_empty_source?: boolean | null;
     /**

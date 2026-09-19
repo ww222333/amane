@@ -37,11 +37,16 @@ TRASH_DIRNAME = ".amane_trash"
 
 
 def validate_fail_dir(value: str) -> str:
-    """库根下单层相对目录名; 空串关闭. 不允许分隔符、`.` / `..`、或与回收站同名."""
-    stripped = value.strip()
+    """库根下单层相对目录名; 空串关闭. 误填绝对/多级路径时取最后一层名.
+
+    不允许 `.` / `..`、与回收站同名.
+    """
+    stripped = value.strip().replace("\\", "/")
     if not stripped:
         return ""
-    if "/" in stripped or "\\" in stripped or stripped in {".", "..", TRASH_DIRNAME}:
+    if "/" in stripped:
+        stripped = stripped.rstrip("/").rsplit("/", 1)[-1].strip()
+    if not stripped or stripped in {".", "..", TRASH_DIRNAME}:
         raise ValueError(f"invalid fail_dir: {value!r}")
     return stripped
 

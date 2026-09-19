@@ -15,8 +15,12 @@ interface PathPickerProps {
   initialPath?: string;
   /** Label for the input. */
   label?: string;
+  /** Description under the label. */
+  description?: string;
   /** Whether the input is read-only. */
   disabled?: boolean;
+  /** Input not editable; browse button still works unless disabled. */
+  readOnly?: boolean;
   /** Placeholder text. */
   placeholder?: string;
 }
@@ -27,7 +31,9 @@ export function PathPicker({
   pathType = "directory",
   initialPath,
   label,
+  description,
   disabled = false,
+  readOnly = false,
   placeholder = "/path/to/directory",
 }: PathPickerProps) {
   const { t } = useTranslation("common");
@@ -49,6 +55,9 @@ export function PathPicker({
           {label}
         </Input.Label>
       )}
+      {description && (
+        <Input.Description size="xs">{description}</Input.Description>
+      )}
       <Group gap="xs" wrap="nowrap">
         <Input
           id={inputId}
@@ -56,6 +65,7 @@ export function PathPicker({
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
           placeholder={placeholder}
           disabled={disabled}
+          readOnly={readOnly}
           style={{ flex: 1 }}
         />
         {!disabled && (

@@ -58,7 +58,7 @@ class LibraryCreateRequest(BaseModel):
     trash_empty_source: bool = False
     """整理为移动且视频离开后: 源目录递归无视频则整目录移入 `.amane_trash`."""
     fail_dir: FailDirName = ""
-    """库根下失败目录相对名; 空则不搬家. 仅媒体库设置手填."""
+    """库根下刮削失败输出目录相对名; 空则不搬家. 媒体库设置中浏览选择."""
     move_to_fail_dir: bool = False
     """整理时无 Metadata 是否整夹移入 fail_dir."""
     exclude_fail_dir: bool = True

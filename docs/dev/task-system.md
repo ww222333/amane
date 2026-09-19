@@ -12,7 +12,7 @@
 | `REFRESH` | 扫描增删、注册 MediaFile、fan-out SCRAPE (`use_cache` 原样转发) | 移动文件、写 NFO |
 | `SCRAPE` | 联网聚合 → DB → Resource; `media_file_id` 只作查询输入 (番号 / oshash) 与回写关联 | 库内移动 / NFO |
 | `TRASH` | 扫描范围内的黑名单与过小视频, 移入 `.amane_trash` (物理移动, 不受 `move_mode`) | 整理正片、写 NFO、注册 MediaFile |
-| `ORGANIZE` | 范围内已有 Metadata 的 MediaFile 按路径模板落盘; Library.`move_mode` 与库级整理默认 (payload 可覆盖 `write_nfo` / `copy_resources` / `trash_empty_source` / `move_to_fail_dir`); `trash_empty_source` 为真且移动成功后, 源目录递归无视频则整目录移入 `.amane_trash` (不碰库根); `move_to_fail_dir` 为真且库 `fail_dir` 非空时, 无 Metadata 的正片整夹移入该失败目录; 缺资源时 `acquire` 可出站 HTTP | 扫描磁盘、回收、运行爬虫、修改 Metadata、记录站点结果 |
+| `ORGANIZE` | 范围内已有 Metadata 的 MediaFile 按路径模板落盘; Library.`move_mode` 与库级整理默认 (payload 可覆盖 `write_nfo` / `copy_resources` / `trash_empty_source` / `move_to_fail_dir`); `trash_empty_source` 为真则整理后全库扫描, 递归无视频的目录整夹移入 `.amane_trash` (不碰库根 / 回收站 / 刮削失败输出目录); `move_to_fail_dir` 为真且库 `fail_dir` 非空时, 无 Metadata 的正片整夹移入该失败目录; 缺资源时 `acquire` 可出站 HTTP | 扫描磁盘、回收、运行爬虫、修改 Metadata、记录站点结果 |
 
 `CLEANUP` / `UPSCALE` 扫描 DB / Resource; `ACTOR_SCRAPE` 刮人物; `R18_IMPORT` 导入 dump. 上述类型均不执行影片落盘.
 

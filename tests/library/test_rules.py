@@ -190,6 +190,9 @@ def test_is_undersized_video_stat_failure_is_not_undersized(tmp_path: Path):
         ("", ""),
         ("  _failed  ", "_failed"),
         ("failed", "failed"),
+        ("/nas3/小姐姐3/失败", "失败"),
+        (r"C:\lib\failed", "failed"),
+        ("a/b/c", "c"),
     ],
 )
 def test_validate_fail_dir_ok(raw: str, expected: str) -> None:
@@ -199,11 +202,11 @@ def test_validate_fail_dir_ok(raw: str, expected: str) -> None:
 @pytest.mark.parametrize(
     "raw",
     [
-        "a/b",
-        r"a\b",
         ".",
         "..",
         TRASH_DIRNAME,
+        "/nas3/小姐姐3/.",
+        f"/lib/{TRASH_DIRNAME}",
     ],
 )
 def test_validate_fail_dir_rejects(raw: str) -> None:

@@ -176,12 +176,12 @@
         "description": "Overrides library setting"
       },
       "trash_empty_source": {
-        "label": "Trash empty source folders",
-        "description": "Overrides library setting; after a successful move, trash the source folder if it has no videos left"
+        "label": "Trash folders with no videos",
+        "description": "Overrides library setting; after organize, scan the library and move folders with no videos into .amane_trash"
       },
       "move_to_fail_dir": {
-        "label": "Move to failure directory",
-        "description": "Overrides library setting; move whole folders of videos without metadata into the library failure directory"
+        "label": "Move to scrape failure directory",
+        "description": "Overrides library setting; move whole folders of videos without metadata into the library scrape failure output directory"
       },
       "copy_resources": {
         "label": "Copy on organize",

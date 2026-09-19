@@ -205,6 +205,36 @@ export function parseBlacklistPatterns(s: string): string[] {
     .filter(Boolean);
 }
 
+/** 库根 + 失败目录相对名 → 展示用绝对路径. */
+export function joinLibraryFailDir(libraryPath: string, failDir: string): string {
+  const root = libraryPath.replace(/[/\\]+$/, "").replace(/\\/g, "/");
+  const name = failDir.trim();
+  if (!name) return "";
+  if (!root) return name;
+  return `${root}/${name}`;
+}
+
+/** 浏览选中的路径 → 库根下单层相对名; 库根本身或空则关闭. */
+export function failDirFromPickedPath(libraryPath: string, picked: string): string {
+  const root = libraryPath.replace(/[/\\]+$/, "").replace(/\\/g, "/");
+  let pickedNorm = picked.trim().replace(/\\/g, "/").replace(/\/+$/, "");
+  if (!pickedNorm) return "";
+  if (root && (pickedNorm === root || pickedNorm.toLowerCase() === root.toLowerCase())) {
+    return "";
+  }
+  if (root) {
+    const prefix = `${root}/`;
+    const prefixLower = prefix.toLowerCase();
+    if (pickedNorm.toLowerCase().startsWith(prefixLower)) {
+      const rel = pickedNorm.slice(root.length + 1);
+      const parts = rel.split("/").filter(Boolean);
+      return parts[0] ?? "";
+    }
+  }
+  const parts = pickedNorm.split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
+}
+
 function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
   return {
     name: form.name.trim(),
@@ -422,29 +452,35 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
             />
           </div>
         </div>
-        <Switch
-          id="library-trash-empty-source"
-          label={t("fieldTrashEmptySource")}
-          description={t("fieldTrashEmptySourceHint")}
-          checked={value.trash_empty_source}
-          onChange={(e) => onChange({ ...value, trash_empty_source: e.currentTarget.checked })}
-        />
-        <TextInput
-          id="library-fail-dir"
+        <PathPicker
           label={t("fieldFailDir")}
           description={t("fieldFailDirHint")}
           placeholder={t("fieldFailDirPlaceholder")}
-          value={value.fail_dir}
-          onChange={(e) => onChange({ ...value, fail_dir: e.currentTarget.value })}
+          value={joinLibraryFailDir(value.path, value.fail_dir)}
+          initialPath={value.path.trim() || undefined}
+          pathType="directory"
+          readOnly
+          onChange={(picked) =>
+            onChange({ ...value, fail_dir: failDirFromPickedPath(value.path, picked) })
+          }
         />
-        <Switch
-          id="library-move-to-fail-dir"
-          label={t("fieldMoveToFailDir")}
-          description={t("fieldMoveToFailDirHint")}
-          checked={value.move_to_fail_dir}
-          disabled={!value.fail_dir.trim()}
-          onChange={(e) => onChange({ ...value, move_to_fail_dir: e.currentTarget.checked })}
-        />
+        <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
+          <Switch
+            id="library-move-to-fail-dir"
+            label={t("fieldMoveToFailDir")}
+            description={t("fieldMoveToFailDirHint")}
+            checked={value.move_to_fail_dir}
+            disabled={!value.fail_dir.trim()}
+            onChange={(e) => onChange({ ...value, move_to_fail_dir: e.currentTarget.checked })}
+          />
+          <Switch
+            id="library-trash-empty-source"
+            label={t("fieldTrashEmptySource")}
+            description={t("fieldTrashEmptySourceHint")}
+            checked={value.trash_empty_source}
+            onChange={(e) => onChange({ ...value, trash_empty_source: e.currentTarget.checked })}
+          />
+        </SimpleGrid>
         <Switch
           id="library-exclude-fail-dir"
           label={t("fieldExcludeFailDir")}

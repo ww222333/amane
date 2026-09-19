@@ -306,9 +306,9 @@ class Library(SQLModel, table=True):
     """ORGANIZE 时在视频同目录发现字幕的扩展名列表; 空列表关闭."""
     write_nfo: bool = Field(default=True)
     trash_empty_source: bool = Field(default=False)
-    """ORGANIZE 为移动且视频离开源目录后: 源目录递归无视频则整目录移入 `.amane_trash`. 默认关."""
+    """ORGANIZE 后全库扫描: 递归无视频则整目录移入 `.amane_trash` (排除库根 / 回收站 / 失败目录). 默认关."""
     fail_dir: str = Field(default="")
-    """库根下失败目录相对名; 空则不搬家. 仅媒体库设置手填."""
+    """库根下刮削失败输出目录相对名; 空则不搬家. 媒体库设置中浏览选择."""
     move_to_fail_dir: bool = Field(default=False)
     """ORGANIZE 时无 Metadata 是否整夹移入 fail_dir. 默认关."""
     exclude_fail_dir: bool = Field(default=True)

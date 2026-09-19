@@ -473,7 +473,6 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         failed = 0
         leftovers_trashed = 0
         failed_moved = 0
-        source_parents: set[Path] = set()
         moved_fail_parents: set[str] = set()
         trash_empty_source = (
             library.trash_empty_source if payload.trash_empty_source is None else payload.trash_empty_source
@@ -541,22 +540,19 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     await commit_organized_media_file(self._repo, media_file, fop_result.dest, library_root)
                 if fop_result.success:
                     organized += 1
-                    # 移动离开源路径后记录父目录, 供可选清残留.
-                    if (
-                        trash_empty_source
-                        and library.move_mode == MoveMode.MOVE
-                        and fop_result.dest is not None
-                        and nfc_path(str(fop_result.dest)) != nfc_path(path_str)
-                    ):
-                        source_parents.add(file_path.parent)
                 else:
                     logger.warning("organize failed", path=path_str, error=fop_result.error)
                     failed += 1
                 await self.report_progress(i, total, file_path.name)
             await self.report_progress(total, total, "done")
 
-        if trash_empty_source and source_parents:
-            leftovers_trashed = await _trash_empty_source_dirs(library_root, source_parents, media_extensions)
+        # 全库扫描: 递归无视频的目录整夹入回收站 (排除库根 / 回收站 / 失败目录).
+        if trash_empty_source:
+            leftovers_trashed = await _trash_empty_source_dirs(
+                library_root,
+                media_extensions,
+                fail_dir_name=fail_dir_name,
+            )
 
         logger.info(
             "organize completed",
@@ -646,21 +642,41 @@ async def _move_source_dir_to_fail(
     return True
 
 
+@in_thread
+def _iter_empty_source_dirs(library_root: Path, fail_dir_name: str) -> list[Path]:
+    """库内候选目录: 不含库根 / 回收站 / 失败目录树. 深层在前."""
+    dirs: list[Path] = []
+    root_key = nfc_path(str(library_root))
+    for path in library_root.rglob("*"):
+        if not path.is_dir():
+            continue
+        if nfc_path(str(path)) == root_key:
+            continue
+        if is_in_trash(path):
+            continue
+        if fail_dir_name and is_in_fail_dir(path, fail_dir_name):
+            continue
+        dirs.append(path)
+    dirs.sort(key=lambda p: len(p.parts), reverse=True)
+    return dirs
+
+
 async def _trash_empty_source_dirs(
     library_root: Path,
-    source_parents: set[Path],
     media_extensions: frozenset[str],
+    *,
+    fail_dir_name: str = "",
 ) -> int:
-    """源目录递归无视频则整目录移入库内 `.amane_trash`. 不碰库根."""
+    """全库扫描: 递归无视频则整目录移入 `.amane_trash`. 不碰库根 / 回收站 / 失败目录."""
     trash_dir = library_root / TRASH_DIRNAME
+    candidates = await _iter_empty_source_dirs(library_root, fail_dir_name)
     trashed = 0
-    # 深层目录先处理, 避免父目录仍含已计划搬走的子目录误判.
-    for directory in sorted(source_parents, key=lambda p: len(p.parts), reverse=True):
-        if nfc_path(str(directory)) == nfc_path(str(library_root)):
-            continue
-        if not is_descendant(directory, library_root) or is_in_trash(directory):
-            continue
+    for directory in candidates:
         if not await path_is_dir(directory):
+            continue
+        if is_in_trash(directory):
+            continue
+        if fail_dir_name and is_in_fail_dir(directory, fail_dir_name):
             continue
         if await _dir_has_video(directory, media_extensions):
             continue

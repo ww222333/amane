@@ -20,7 +20,7 @@ from amane.config import (
     WorkerConfig,
 )
 from amane.config.manager import LANG_METADATA_FIELD_SET
-from amane.enums import Language, MetadataField, SiteName, WatermarkCorner, WatermarkKind
+from amane.enums import ApiType, Language, MetadataField, SiteName, WatermarkCorner, WatermarkKind
 from amane.parsing import ContentType
 
 # ---------------------------------------------------------------------------
@@ -346,13 +346,6 @@ class TestWatermarkConfig:
 class TestConfigManagerUpdate:
     """ConfigManager.update() - patch 合并语义"""
 
-    @pytest.fixture
-    def mgr(self, tmp_path: Path) -> ConfigManager:
-        """使用 tmp_path 作为 data_dir 的新 ConfigManager"""
-        with patch.dict(os.environ, {"AMANE_DATA_DIR": str(tmp_path)}, clear=False):
-            cold = ColdSettings()
-        return ConfigManager.with_cold(cold)
-
     def test_single_field(self, mgr: ConfigManager):
         """更新单个字段"""
         mgr.update({"network": {"proxy": "socks5://localhost:1080"}})
@@ -541,3 +534,45 @@ class TestConfigManagerLoad:
         assert mgr2.hot.worker.poll_interval == 5.0
         assert mgr2.hot.scraping.crop_poster is False
         assert mgr2.hot.watcher.use_polling is True
+
+
+class TestLLMConfig:
+    """llm 配置: 自定义提示词的持久化与归一, api_type 的默认值与往返."""
+
+    def test_round_trip_preserves_prompts(self, mgr: ConfigManager):
+        mgr.update({"llm": {"system_prompt": "只用中性词汇.", "field_prompts": {"title": "标题不超过 30 字."}}})
+
+        reloaded = ConfigManager.with_cold(mgr.cold)
+
+        assert reloaded.hot.llm.system_prompt == "只用中性词汇."
+        assert reloaded.hot.llm.field_prompts == {MetadataField.TITLE: "标题不超过 30 字."}
+
+    def test_clearing_prompts_restores_builtin(self, mgr: ConfigManager):
+        mgr.update({"llm": {"system_prompt": "只用中性词汇.", "field_prompts": {"title": "标题不超过 30 字."}}})
+        mgr.update({"llm": {"system_prompt": None, "field_prompts": {}}})
+
+        reloaded = ConfigManager.with_cold(mgr.cold)
+
+        assert reloaded.hot.llm.system_prompt is None
+        assert reloaded.hot.llm.field_prompts == {}
+
+    def test_blank_prompts_not_persisted(self, mgr: ConfigManager):
+        """空白提示词归一为未配置, 配置段回到全默认时不写入 TOML."""
+        mgr.update({"llm": {"system_prompt": "   ", "field_prompts": {"plot": "  "}}})
+
+        with open(mgr.cold.config_path, "rb") as f:
+            data = tomllib.load(f)
+
+        assert data == {}
+        assert mgr.hot.llm.system_prompt is None
+        assert mgr.hot.llm.field_prompts == {}
+
+    def test_api_type_default_and_round_trip(self, mgr: ConfigManager):
+        """默认 chat 与原先固定走 Chat Completions 的语义一致; 未知协议拒绝."""
+        assert mgr.hot.llm.api_type is ApiType.CHAT
+
+        mgr.update({"llm": {"api_type": "anthropic"}})
+        assert ConfigManager.with_cold(mgr.cold).hot.llm.api_type is ApiType.ANTHROPIC
+
+        with pytest.raises(ValidationError, match=r"Input should be 'chat', 'response' or 'anthropic'"):
+            mgr.update({"llm": {"api_type": "bogus"}})

@@ -1,13 +1,14 @@
-from .backend import OpenAIBackend
 from .cache import TranslationCache
-from .protocol import LLMBackend, Translator
-from .translator import LLMTranslator, build_translator
+from .model import build_model
+from .protocol import Translator
+from .translator import TARGET_LANG_PLACEHOLDER, LLMTranslator, build_system_prompt, build_translator
 
 __all__ = [
-    "LLMBackend",
+    "TARGET_LANG_PLACEHOLDER",
     "LLMTranslator",
-    "OpenAIBackend",
     "TranslationCache",
     "Translator",
+    "build_model",
+    "build_system_prompt",
     "build_translator",
 ]

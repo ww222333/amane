@@ -9,6 +9,8 @@
     "reset": "Reset",
     "discard": "Discard",
     "retry": "Retry",
+    "close": "Close",
+    "filters": "Filters and search",
     "confirm": "Confirm",
     "browse": "Browse",
     "saving": "Saving...",
@@ -20,7 +22,9 @@
     "scrapeNormal": "Scrape",
     "scrapeNormalDesc": "Do not re-fetch cached data",
     "scrapeForce": "Force Scrape",
-    "scrapeForceDesc": "Re-fetch all sources (overwrite cache)"
+    "scrapeForceDesc": "Re-fetch all sources (overwrite cache)",
+    "moveUp": "Move up",
+    "moveDown": "Move down"
   },
   "status": {
     "loading": "Loading...",
@@ -33,10 +37,11 @@
   },
   "nav": {
     "library": "Library",
-    "plugins": "Scrape plugins",
+    "plugins": "Plugins",
     "tasks": "Tasks",
     "schedules": "Schedules",
     "settings": "Settings",
+    "client": "Client",
     "logs": "Logs",
     "meta": "Library",
     "actors": "Actors",
@@ -71,7 +76,8 @@
     "totalItems_other": "({{count}} total)",
     "range": "{{start}}–{{end}} of {{total}}",
     "pageSizeShort": "{{size}}/page",
-    "loadedOfTotal": "Loaded {{loaded}} / {{total}}"
+    "loadedOfTotal": "Loaded {{loaded}} / {{total}}",
+    "pageOf": "Page {{page}} of {{total}}"
   },
   "validation": {
     "invalid": "Invalid value",
@@ -123,6 +129,7 @@
     "facetDeleted": "Facet deleted and blocklisted",
     "facetRuleDeleted": "Rule removed",
     "commentCreated": "Comment posted",
+    "commentUpdated": "Comment saved",
     "commentDeleted": "Comment deleted"
   },
   "batch": {
@@ -149,6 +156,7 @@
     "title": "Sign in required",
     "description": "On desktop, click the menu bar / tray icon and copy the API token. In a container, read it from the token file in the data directory.",
     "tokenPlaceholder": "Paste token",
+    "serverSettings": "Server settings",
     "invalidToken": "Invalid token. Please check and retry.",
     "connectionFailed": "Cannot reach the server. Make sure it is running."
   }

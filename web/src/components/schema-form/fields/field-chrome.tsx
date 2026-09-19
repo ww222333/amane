@@ -1,6 +1,8 @@
 import { Group, Input, Stack, Text } from "@mantine/core";
 import type * as React from "react";
+import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import type { FieldVariant } from "../schema";
+import classes from "./field-chrome.module.css";
 
 /**
  * Layout direction of the label/description relative to the control.
@@ -9,6 +11,7 @@ import type { FieldVariant } from "../schema";
  *   Used by text/numeric/enum/path fields.
  * - `horizontal` - label + description on the left, control on the right.
  *   Used by bool field (Switch is small enough to share a row).
+ *   窄屏 (<sm) 纵向排列, 见 `field-chrome.module.css`.
  */
 export type FieldChromeLayout = "vertical" | "horizontal";
 
@@ -45,6 +48,8 @@ export function FieldChrome({
   children,
   error,
 }: FieldChromeProps) {
+  const narrow = useNarrowViewport();
+
   if (variant === "bare") {
     return (
       <>
@@ -58,9 +63,18 @@ export function FieldChrome({
     );
   }
 
+  // 对齐只能经 `align` 属性给, 样式表压不过 Mantine 写出的内联值 (除非 `!important`).
+  // 断点与 field-chrome.module.css 的媒体查询同源, 都由 sm 决定.
   if (layout === "horizontal") {
     return (
-      <Group justify="space-between" align="center" wrap="nowrap" gap="md" py="xs">
+      <Group
+        className={classes.horizontalRow}
+        justify="space-between"
+        align={narrow ? "flex-start" : "center"}
+        wrap="nowrap"
+        gap="md"
+        py="xs"
+      >
         <Stack gap={2}>
           <Input.Label htmlFor={htmlFor} size="sm" fw={500}>
             {label}
@@ -71,7 +85,7 @@ export function FieldChrome({
             </Text>
           )}
         </Stack>
-        <Stack gap={4} align="flex-end">
+        <Stack gap={4} align={narrow ? "flex-start" : "flex-end"} className={classes.controlRow}>
           {children}
           {error && <Input.Error size="xs">{error}</Input.Error>}
         </Stack>

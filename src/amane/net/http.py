@@ -136,6 +136,20 @@ def _failure_body(resp: Response | None) -> bytes | None:
 _FAILURE_BODY_LIMIT = 64 * 1024
 
 
+def _with_same_origin_referer(
+    host: str | None, headers: dict[str, str] | None, hosts: frozenset[str]
+) -> dict[str, str] | None:
+    """host 命中 ``hosts`` 且调用方未给出 Referer 时补同源 Referer; 已有则保持原值.
+
+    站点按 Referer 前缀匹配, 结尾斜杠属于匹配条件, 不可省略. 不修改传入的字典.
+    """
+    if host is None or host not in hosts:
+        return headers
+    if headers is not None and any(k.lower() == "referer" for k in headers):
+        return headers
+    return {**(headers or {}), "Referer": f"https://{host}/"}
+
+
 class WebClient:
     def __init__(
         self,
@@ -145,11 +159,13 @@ class WebClient:
         max_retries: int = 3,
         max_clients: int = 50,
         limiters: RateLimiters,
+        same_origin_referer_hosts: frozenset[str] = frozenset(),
     ):
         self._proxy = proxy
         self._timeout = timeout
         self._max_retries = max_retries
         self._limiters = limiters
+        self._same_origin_referer_hosts = same_origin_referer_hosts
         self._session = AsyncSession(
             max_clients=max_clients,
             verify=False,
@@ -174,6 +190,7 @@ class WebClient:
     ) -> Response:
         """``ok_statuses`` 额外视为成功 (例如 RSS 304), 不重试、不当失败. 重试用尽后抛 ``RequestError``."""
         host = httpx.URL(url).host
+        headers = _with_same_origin_referer(host, headers, self._same_origin_referer_hosts)
         await self._limiters.get(host).acquire()
 
         t0 = time.monotonic()
@@ -372,18 +389,32 @@ class WebClient:
                 url, RequestFailure(kind=FailureKind.UNEXPECTED, message=f"JSON parse error: {e}")
             ) from e
 
-    async def get_filesize(self, url: str, *, use_proxy: bool = True) -> int | None:
+    async def _probe(self, url: str, *, use_proxy: bool) -> tuple[int | None, str]:
+        """HEAD 探测 Content-Length 与重定向终址; 探测失败时终址回退为 ``url``."""
         try:
             resp = await self.request("HEAD", url, use_proxy=use_proxy)
         except RequestError:
-            return None
+            return None, url
+        final_url = str(resp.url) if resp.url else url
         if resp.status_code >= 400:
-            return None
+            return None, final_url
+        cl = resp.headers.get("Content-Length")
         try:
-            cl = resp.headers.get("Content-Length")
-            return int(cl) if cl else None
+            return (int(cl) if cl else None), final_url
         except ValueError, TypeError:
-            return None
+            return None, final_url
+
+    async def get_filesize(self, url: str, *, use_proxy: bool = True) -> int | None:
+        size, _ = await self._probe(url, use_proxy=use_proxy)
+        return size
+
+    async def resolve_final_url(self, url: str, *, use_proxy: bool = True) -> str:
+        """跟随重定向后的终址; 探测失败时返回 ``url``.
+
+        调用方据此判定上游是否改派了别的资源 (如占位图).
+        """
+        _, final_url = await self._probe(url, use_proxy=use_proxy)
+        return final_url
 
     async def download(
         self,
@@ -396,7 +427,7 @@ class WebClient:
         download_concurrency: int = 10,
     ) -> bool:
         """大于 chunked_threshold 时分块并发下载. 失败返回 False."""
-        file_size = await self.get_filesize(url, use_proxy=use_proxy)
+        file_size, _ = await self._probe(url, use_proxy=use_proxy)
 
         if file_size and file_size > chunked_threshold:
             return await self._download_chunked(

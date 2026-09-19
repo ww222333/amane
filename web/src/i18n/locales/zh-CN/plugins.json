@@ -1,9 +1,10 @@
 {
-  "title": "刮削插件",
+  "title": "插件",
   "loadError": "插件加载失败",
-  "empty": "暂无外部刮削插件",
+  "empty": "暂无外部插件",
   "save": "保存插件配置",
-  "sourceId": "来源 ID",
+  "settings": "插件设置",
+  "settingsTitle": "{{name}} 设置",
   "version": "版本",
   "path": "源码路径",
   "enabled": "启用插件",
@@ -17,6 +18,13 @@
   "installed": "插件已安装",
   "uninstalled": "插件已卸载",
   "reloaded": "已重新扫描插件",
-  "routeHint": "安装后需在类型路由中添加才会启用",
-  "routeLink": "打开影片刮削设置"
+  "playbackOrder": "播放源顺序",
+  "routeHint": "刮削插件安装后需在类型路由中添加才会参与刮削",
+  "routeLink": "打开影片刮削设置",
+  "capabilities": {
+    "film_metadata": "影片元数据",
+    "playback": "播放",
+    "actor_profile": "演员档案",
+    "actor_image": "演员头像"
+  }
 }

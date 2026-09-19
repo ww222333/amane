@@ -1,4 +1,4 @@
-"""Install, load, and remove on-disk film-source plugin trees."""
+"""Install, load, and remove on-disk source plugin trees."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import zipfile
 from pathlib import Path
 from types import ModuleType
 
-from .api import FilmSourcePlugin
+from .api import FilmSourcePlugin, PlaybackPlugin
 from .models import validate_external_source_id
 
 PLUGIN_ENTRY = "plugin.py"
@@ -70,6 +70,10 @@ def inspect_plugin_id(directory: Path) -> str:
         plugin_id = _descriptor_id_from_module(module)
         validate_external_source_id(plugin_id)
         return plugin_id
+    except ImportError as exc:
+        # 安装是用户操作: 插件 import 不到模块 (第三方依赖未随主机提供, 或打包版缺该标准库模块)
+        # 必须当作可读的载荷错误上报, 而不是让路由给出 500.
+        raise ValueError(f"插件导入失败: {exc}") from exc
     finally:
         staging = module_name(staging_id)
         sys.modules.pop(staging, None)
@@ -154,8 +158,12 @@ def uninstall_plugin_tree(data_dir: Path, plugin_id: str) -> None:
 
 def _descriptor_id_from_module(module: ModuleType) -> str:
     candidate = module.__dict__.get(PLUGIN_CLASS_NAME)
-    if not isinstance(candidate, type) or not issubclass(candidate, FilmSourcePlugin):
-        raise TypeError(f"{PLUGIN_ENTRY} must define a FilmSourcePlugin subclass named {PLUGIN_CLASS_NAME}")
+    if not isinstance(candidate, type) or not (
+        issubclass(candidate, FilmSourcePlugin) or issubclass(candidate, PlaybackPlugin)
+    ):
+        raise TypeError(
+            f"{PLUGIN_ENTRY} must define a FilmSourcePlugin or PlaybackPlugin subclass named {PLUGIN_CLASS_NAME}"
+        )
     return candidate().descriptor().id
 
 

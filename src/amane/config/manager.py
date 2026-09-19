@@ -5,7 +5,7 @@ import tomllib
 from copy import copy
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import tomli_w
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -21,7 +21,15 @@ from ..crawlers.site_roles import (
     site_list_value_schema,
 )
 from ..crawlers.sites.official import Manufacturer
-from ..enums import DownloadableResource, Language, MetadataField, SiteName, WatermarkCorner, WatermarkKind
+from ..enums import (
+    ApiType,
+    DownloadableResource,
+    Language,
+    MetadataField,
+    SiteName,
+    WatermarkCorner,
+    WatermarkKind,
+)
 from ..parsing import ContentType
 from ..plugins.models import PluginConfig
 from ..sr import SrPreset
@@ -560,6 +568,13 @@ class SrConfig(BaseModel):
     tta: bool = Field(default=False, json_schema_extra={"x-hidden": True})
 
 
+PROMPT_MAX_LENGTH = 2000
+"""单条提示词长度上限, 避免超长文本撑大 TOML 与设置表单."""
+
+PromptText = Annotated[str, Field(max_length=PROMPT_MAX_LENGTH, json_schema_extra={"x-long": True})]
+"""提示词文本框: ``x-long`` 声明多行, 顶层字段与 dict 值共用同一控制符."""
+
+
 class LLMConfig(BaseModel):
     """凭据放 Hot, 可在 UI 修改并热生效. 与 agent section 隔离."""
 
@@ -569,20 +584,40 @@ class LLMConfig(BaseModel):
     translate_fields: list[MetadataField] = Field(default_factory=lambda: [MetadataField.TITLE, MetadataField.PLOT])
     """当前仅支持文本标量字段 (title/plot)."""
 
+    system_prompt: str | None = Field(default=None, max_length=PROMPT_MAX_LENGTH, json_schema_extra={"x-long": True})
+    """自定义 system 提示词的指令部分; 空白等价于未配置, 使用内置.
+
+    可用 ``{target_lang}`` 引用目标语言名; 字段说明与输出约束由 Amane 追加, 不受此值影响.
+    """
+
+    field_prompts: dict[MetadataField, PromptText] = Field(default_factory=dict)
+    """逐字段覆盖内置字段说明; 值为空白的条目等价于未配置.
+
+    可用 ``{target_lang}`` 引用目标语言名. 未列出的字段使用内置说明.
+    """
+
     api_key: str | None = None
     """为空时即使 enabled 也不翻译."""
 
+    api_type: ApiType = ApiType.CHAT
     base_url: str = "https://api.openai.com/v1"
     model: str = ""
-    max_retries: int = Field(default=3, ge=0, le=10)
     rate_limit: float = Field(default=2.0, ge=0.1, le=100)
     """与站点限速隔离."""
 
+    @field_validator("system_prompt")
+    @classmethod
+    def _blank_system_prompt_is_unset(cls, value: str | None) -> str | None:
+        """空白提示词与未配置等价, 避免把空白串写进 TOML."""
+        if value is None:
+            return None
+        return value.strip() or None
 
-class AgentApiType(StrEnum):
-    CHAT = "chat"
-    RESPONSE = "response"
-    ANTHROPIC = "anthropic"
+    @field_validator("field_prompts")
+    @classmethod
+    def _blank_field_prompts_are_unset(cls, value: dict[MetadataField, str]) -> dict[MetadataField, str]:
+        """空白条目与缺席等价, 与可增减 key 的 dict 编码语义一致."""
+        return {field: text.strip() for field, text in value.items() if text.strip()}
 
 
 class AgentThinkingMode(StrEnum):
@@ -599,7 +634,7 @@ class AgentThinkingMode(StrEnum):
 class AgentConfig(BaseModel):
     """与 llm 翻译 section 分离: 凭据/模型/限速各自独立."""
 
-    api_type: AgentApiType = AgentApiType.RESPONSE
+    api_type: ApiType = ApiType.RESPONSE
     api_key: str | None = None
     base_url: str = "https://api.openai.com/v1"
     """可指向自建/第三方代理; anthropic 须填 Anthropic 端点."""

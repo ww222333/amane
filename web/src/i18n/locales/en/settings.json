@@ -15,6 +15,19 @@
   "config": {
     "loadError": "Failed to load configuration"
   },
+  "client": {
+    "title": "Client settings",
+    "unavailable": "This page is only available inside the Android shell.",
+    "bridgeMissing": "The shell is not responding to page requests. Reinstall or update the app.",
+    "server": "Current server",
+    "switchServer": "Switch server",
+    "webView": "System WebView",
+    "chromium": "Rendering engine",
+    "webViewUnknown": "Unknown",
+    "chromiumOutdated": "Rendering engine Chromium {{major}} is below the {{min}} this frontend needs. Update the system WebView, otherwise the layout and styles will be incomplete.",
+    "updateWebView": "Open the WebView store page",
+    "appVersion": "APP version"
+  },
   "fields": {
     "scraping": {
       "download_resources": {
@@ -548,15 +561,20 @@
         "label": "API Key",
         "description": ""
       },
+      "api_type": {
+        "label": "API Type",
+        "options": {
+          "chat": "Chat",
+          "response": "Responses",
+          "anthropic": "Anthropic"
+        }
+      },
       "base_url": {
         "label": "API Endpoint",
         "description": "OpenAI-compatible API base URL"
       },
       "model": {
         "label": "Model"
-      },
-      "max_retries": {
-        "label": "Max Retries"
       },
       "rate_limit": {
         "label": "Max requests per second"
@@ -582,6 +600,32 @@
             "extrafanart": "Stills",
             "score": "Score"
           }
+        }
+      },
+      "system_prompt": {
+        "label": "System Prompt"
+      },
+      "field_prompts": {
+        "label": "Field Prompts",
+        "$": {
+          "label": "Prompt"
+        },
+        "options": {
+          "title": "Title",
+          "actors": "Actors",
+          "tags": "Tags",
+          "release": "Release Date",
+          "runtime": "Runtime",
+          "directors": "Directors",
+          "series": "Series",
+          "studio": "Studio",
+          "publisher": "Publisher",
+          "plot": "Plot",
+          "poster_urls": "Poster",
+          "thumb_urls": "Cover",
+          "trailer_urls": "Trailer",
+          "extrafanart": "Stills",
+          "score": "Score"
         }
       }
     },

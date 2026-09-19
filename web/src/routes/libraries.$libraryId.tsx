@@ -7,6 +7,7 @@ import {
   Group,
   Modal,
   SegmentedControl,
+  Select,
   Skeleton,
   Stack,
   Text,
@@ -41,6 +42,7 @@ import {
 } from "@/components/library/library-form";
 import { LibraryMediaTable } from "@/components/library/library-media-table";
 import { useResettingState } from "@/hooks/use-resetting-state";
+import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { extractErrorMessage } from "@/lib/api-error";
 import { isOneOf } from "@/lib/exhaustive";
 import { MEDIA_FILE_STATUSES, MEDIA_SORT_FIELDS, SORT_ORDERS } from "@/lib/exhaustive-maps";
@@ -90,6 +92,7 @@ function LibraryDetailPage() {
   const routeNavigate = Route.useNavigate();
   const { t } = useTranslation(["library", "common"]);
   const navigate = useNavigate();
+  const narrow = useNarrowViewport("md");
   const queryClient = useQueryClient();
   const listLimit = useUIStore((s) => s.pageSizes.libraryMedia);
 
@@ -245,14 +248,17 @@ function LibraryDetailPage() {
           />
         }
         extras={
-          <HintedActionIcon
-            variant={advancedOpen || hasStatusFilter ? "filled" : "default"}
-            size={36}
-            onClick={() => setAdvancedOpen((v) => !v)}
-            label={t("filters.title")}
-          >
-            <IconFilter size={16} />
-          </HintedActionIcon>
+          /* 窄屏的筛选在底部面板里常驻展开, 该开关只在宽屏有意义. */
+          narrow ? null : (
+            <HintedActionIcon
+              variant={advancedOpen || hasStatusFilter ? "filled" : "default"}
+              size={36}
+              onClick={() => setAdvancedOpen((v) => !v)}
+              label={t("filters.title")}
+            >
+              <IconFilter size={16} />
+            </HintedActionIcon>
+          )
         }
         pageSize={
           <PageSizeSelect
@@ -260,16 +266,30 @@ function LibraryDetailPage() {
             onChanged={() => void routeNavigate({ search: (prev) => ({ ...prev, page: 1 }) })}
           />
         }
+        filterPanel={
+          <Collapse expanded={narrow || advancedOpen}>
+            {narrow ? (
+              // 窄屏 SegmentedControl 宽度不足, 右侧选项被裁剪且无法滚动; 改用下拉完整列出.
+              <Select
+                size="sm"
+                allowDeselect={false}
+                value={search.status ?? ""}
+                onChange={setStatusFilter}
+                data={statusOptions}
+                aria-label={t("filters.title")}
+                comboboxProps={{ withinPortal: !narrow }}
+              />
+            ) : (
+              <SegmentedControl
+                size="sm"
+                value={search.status ?? ""}
+                onChange={setStatusFilter}
+                data={statusOptions}
+              />
+            )}
+          </Collapse>
+        }
       >
-        <Collapse expanded={advancedOpen}>
-          <SegmentedControl
-            size="sm"
-            value={search.status ?? ""}
-            onChange={setStatusFilter}
-            data={statusOptions}
-          />
-        </Collapse>
-
         {search.status != null && (
           <Group gap="xs">
             <Group gap={4} wrap="nowrap">

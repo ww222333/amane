@@ -15,6 +15,19 @@
   "config": {
     "loadError": "加载配置失败"
   },
+  "client": {
+    "title": "客户端设置",
+    "unavailable": "此页面只在 Android 壳内可用。",
+    "bridgeMissing": "壳没有响应页面请求，请重新安装或更新 APP。",
+    "server": "当前服务器",
+    "switchServer": "切换服务器",
+    "webView": "系统 WebView",
+    "chromium": "渲染内核",
+    "webViewUnknown": "未知",
+    "chromiumOutdated": "渲染内核 Chromium {{major}} 低于前端需要的 {{min}}。请更新系统 WebView，否则布局与样式会残缺。",
+    "updateWebView": "打开 WebView 的商店页",
+    "appVersion": "APP 版本"
+  },
   "fields": {
     "scraping": {
       "download_resources": {
@@ -548,15 +561,20 @@
         "label": "API 密钥",
         "description": ""
       },
+      "api_type": {
+        "label": "API 类型",
+        "options": {
+          "chat": "Chat",
+          "response": "Responses",
+          "anthropic": "Anthropic"
+        }
+      },
       "base_url": {
         "label": "API 端点",
         "description": "OpenAI 兼容 API BASE URL"
       },
       "model": {
         "label": "模型"
-      },
-      "max_retries": {
-        "label": "最大重试次数"
       },
       "rate_limit": {
         "label": "每秒请求上限"
@@ -582,6 +600,32 @@
             "extrafanart": "剧照",
             "score": "评分"
           }
+        }
+      },
+      "system_prompt": {
+        "label": "系统提示词"
+      },
+      "field_prompts": {
+        "label": "字段提示词",
+        "$": {
+          "label": "提示词"
+        },
+        "options": {
+          "title": "标题",
+          "actors": "演员",
+          "tags": "标签",
+          "release": "发行日期",
+          "runtime": "时长",
+          "directors": "导演",
+          "series": "系列",
+          "studio": "制作商",
+          "publisher": "发行商",
+          "plot": "简介",
+          "poster_urls": "海报",
+          "thumb_urls": "封面",
+          "trailer_urls": "预告片",
+          "extrafanart": "剧照",
+          "score": "评分"
         }
       }
     },

@@ -38,6 +38,7 @@ import {
   type FacetFilters,
   removeFacetId,
 } from "@/lib/facets";
+import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { nextOffsetPageParam } from "@/lib/infinite-list";
 import { useUIStore } from "@/stores/ui";
 
@@ -157,6 +158,7 @@ function MetaIndexPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const listLimit = useUIStore((s) => s.pageSizes.metaList);
+  const narrowViewport = useNarrowViewport("md");
 
   const hasFiles = parseHasFiles(search.has_files);
   const filePhase: FilePhaseFilters = {
@@ -362,14 +364,17 @@ function MetaIndexPage() {
       }
       extras={
         <>
-          <HintedActionIcon
-            variant={advancedOpen || hasFiles !== null ? "filled" : "default"}
-            size={36}
-            onClick={() => setAdvancedOpen((v) => !v)}
-            label={t("search.advanced")}
-          >
-            <IconFilter size={16} />
-          </HintedActionIcon>
+          {/* 窄屏的筛选在底部面板里常驻展开, 该开关只在宽屏有意义. */}
+          {narrowViewport ? null : (
+            <HintedActionIcon
+              variant={advancedOpen || hasFiles !== null ? "filled" : "default"}
+              size={36}
+              onClick={() => setAdvancedOpen((v) => !v)}
+              label={t("search.advanced")}
+            >
+              <IconFilter size={16} />
+            </HintedActionIcon>
+          )}
           {!isList && (
             <SortMenu
               options={SORT_FIELDS.map((f) => ({
@@ -395,17 +400,18 @@ function MetaIndexPage() {
           />
         ) : undefined
       }
+      filterPanel={
+        <FacetFilterControls
+          opened={narrowViewport || advancedOpen}
+          filters={filters}
+          onSelect={appendFacet}
+          hasFiles={hasFiles}
+          onHasFilesChange={setHasFilesFilter}
+          filePhase={filePhase}
+          onFilePhaseChange={setFilePhaseFilter}
+        />
+      }
     >
-      <FacetFilterControls
-        opened={advancedOpen}
-        filters={filters}
-        onSelect={appendFacet}
-        hasFiles={hasFiles}
-        onHasFilesChange={setHasFilesFilter}
-        filePhase={filePhase}
-        onFilePhaseChange={setFilePhaseFilter}
-      />
-
       {hasActiveFilters && (
         <Group gap="xs">
           {search.saved_query_id != null && (

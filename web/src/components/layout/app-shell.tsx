@@ -18,6 +18,7 @@ import {
   IconBrandGithub,
   IconCategory,
   IconClock,
+  IconDeviceMobile,
   IconFileText,
   IconFolders,
   IconLanguage,
@@ -45,6 +46,7 @@ import { APP_SHELL_HEADER_HEIGHT } from "@/components/layout/app-shell-metrics";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { VersionMenu } from "@/components/layout/version-menu";
 import { APP_NAME, GITHUB_URL } from "@/lib/app";
+import { shellEnvironment } from "@/lib/shell";
 import { useConnectionStore } from "@/stores/connection";
 import { useUIStore } from "@/stores/ui";
 
@@ -101,7 +103,7 @@ function isNavActive(pathname: string, to: string, end = false): boolean {
   return pathname === to || pathname.startsWith(`${to}/`);
 }
 
-function NavItemLink({ item }: { item: NavItem }) {
+function NavItemLink({ item, onNavigate }: { item: NavItem; onNavigate?: () => void }) {
   const { t } = useTranslation("common");
   const { pathname } = useLocation();
   const Icon = item.icon;
@@ -114,6 +116,7 @@ function NavItemLink({ item }: { item: NavItem }) {
       leftSection={<Icon size={18} stroke={1.6} />}
       active={isNavActive(pathname, item.to, item.end)}
       variant="filled"
+      onClick={onNavigate}
       style={{ borderRadius: "var(--mantine-radius-md)" }}
     />
   );
@@ -180,6 +183,28 @@ function LanguageMenu() {
   );
 }
 
+/**
+ * 客户端设置入口: 服务器与登录态属于客户端, 不并入服务端配置. 只在壳内渲染 (判据见 lib/shell.ts).
+ */
+function ClientSettingsLink({ available }: { available: boolean }) {
+  const { t } = useTranslation("common");
+  const navigate = useNavigate();
+  const { pathname } = useLocation();
+  if (!available) return null;
+
+  return (
+    <HintedActionIcon
+      variant="subtle"
+      color={isNavActive(pathname, "/client") ? "brand" : "gray"}
+      size="lg"
+      onClick={() => void navigate({ to: "/client" })}
+      label={t("nav.client")}
+    >
+      <IconDeviceMobile size={18} />
+    </HintedActionIcon>
+  );
+}
+
 function ConnectionIndicator() {
   const status = useConnectionStore((s) => s.status);
   const { t } = useTranslation("common");
@@ -215,12 +240,15 @@ function HeaderSearch() {
 
   // 快捷入口: 已在片库页时隐藏, 避免与页内搜索重复
   if (location.pathname === "/meta" || location.pathname.startsWith("/meta/")) {
-    return <div style={{ flex: 1 }} />;
+    return <div style={{ flex: 1, minWidth: 0 }} />;
   }
 
   return (
-    <form
-      style={{ flex: 1, maxWidth: 480, marginLeft: 24 }}
+    // 窄屏顶栏放不下搜索框, 入口回落到片库页内搜索.
+    <Box
+      component="form"
+      visibleFrom="sm"
+      style={{ flex: 1, minWidth: 0, maxWidth: 480, marginLeft: 24 }}
       onSubmit={(e) => {
         e.preventDefault();
         const q = value.trim();
@@ -235,7 +263,7 @@ function HeaderSearch() {
         leftSection={<IconSearch size={16} />}
         radius="md"
       />
-    </form>
+    </Box>
   );
 }
 
@@ -255,12 +283,13 @@ function HeaderBrand() {
           <Title order={4}>{APP_NAME}</Title>
         </Group>
       </Link>
-      <VersionMenu />
+      {/* 窄屏顶栏只保留品牌与图标动作, 版本号在侧栏内呈现; 不加包装元素, 避免改变宽屏下的行内基线. */}
+      <VersionMenu visibleFrom="sm" />
     </Group>
   );
 }
 
-function GithubLink() {
+function GithubLink({ visibleFrom }: { visibleFrom?: "sm" }) {
   const { t } = useTranslation("common");
 
   return (
@@ -273,6 +302,7 @@ function GithubLink() {
         variant="subtle"
         color="gray"
         size="lg"
+        visibleFrom={visibleFrom}
         aria-label={t("about.github")}
       >
         <IconBrandGithub size={18} />
@@ -283,9 +313,10 @@ function GithubLink() {
 
 export function AppShellLayout(): ReactNode {
   const { t } = useTranslation("common");
-  const [mobileOpened, { toggle: toggleMobile }] = useDisclosure(false);
+  const [mobileOpened, { toggle: toggleMobile, close: closeMobile }] = useDisclosure(false);
   const desktopCollapsed = useUIStore((s) => s.navbarCollapsed);
   const toggleDesktop = useUIStore((s) => s.toggleNavbar);
+  const shell = shellEnvironment();
 
   return (
     <AppShell
@@ -320,13 +351,20 @@ export function AppShellLayout(): ReactNode {
             <ConnectionIndicator />
             <ThemeToggle />
             <LanguageMenu />
-            <GithubLink />
+            <ClientSettingsLink available={shell != null} />
+            {/* 窄屏顶栏放不下外链, 该入口收进侧栏底部. */}
+            <GithubLink visibleFrom="sm" />
           </Group>
         </Group>
       </AppShell.Header>
 
       <AppShell.Navbar p="sm">
-        <ScrollArea style={{ flex: 1 }} offsetScrollbars>
+        <ScrollArea
+          style={{ flex: 1 }}
+          offsetScrollbars
+          // 侧栏滚到尽头时不许把滚动传给底下的页面 (触屏上尤其明显).
+          viewportProps={{ style: { overscrollBehavior: "contain" } }}
+        >
           {NAV_GROUPS.map((group) => (
             <div key={group.key} style={{ marginBottom: 16 }}>
               <Text
@@ -340,13 +378,23 @@ export function AppShellLayout(): ReactNode {
                 {t(group.labelKey)}
               </Text>
               {group.items.map((item) => (
-                <NavItemLink key={item.to} item={item} />
+                <NavItemLink key={item.to} item={item} onNavigate={closeMobile} />
               ))}
             </div>
           ))}
         </ScrollArea>
         <Divider mb="sm" />
-        <NavItemLink item={{ to: "/settings", labelKey: "nav.settings", icon: IconSettings }} />
+        <NavItemLink
+          item={{ to: "/settings", labelKey: "nav.settings", icon: IconSettings }}
+          onNavigate={closeMobile}
+        />
+        {/* 窄屏顶栏放不下版本与外链, 收进侧栏底部. */}
+        <Group hiddenFrom="sm" gap="xs" px="xs" pt="sm" wrap="nowrap">
+          <VersionMenu />
+          <Box ml="auto">
+            <GithubLink />
+          </Box>
+        </Group>
       </AppShell.Navbar>
 
       <AppShell.Main>

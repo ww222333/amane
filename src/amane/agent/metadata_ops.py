@@ -10,7 +10,7 @@ from ..db.models import TaskType
 from ..db.repo_types import MetadataFields
 from ..handlers.models import CacheKind, ScrapePayload
 from ..parsing import ContentType
-from .tools import AgentDeps, require_approval, trace_tool
+from .tools import TOOL_OK, AgentDeps, require_approval, trace_tool, unknown_field_error
 
 _AGENT_PATCH_KEYS = frozenset(
     {
@@ -38,59 +38,50 @@ _AGENT_PATCH_KEYS = frozenset(
 def build_metadata_ops_capability() -> Capability[AgentDeps]:
     cap: Capability[AgentDeps] = Capability(
         id="metadata-ops",
-        description=(
-            "Use for editing metadata fields, user tags, merge from raw sources, "
-            "enqueue scrape tasks, or deleting metadata. Load before write tools."
-        ),
-        instructions=(
-            "You may mutate metadata only via these tools — never raw SQL writes. "
-            "Prefer ids from sql_deliver / explore views. "
-            "delete_metadata and batch_delete_metadata require user approval."
-        ),
-        defer_loading=True,
     )
 
     @cap.tool
-    async def update_metadata(ctx: RunContext[AgentDeps], metadata_id: int, patch: dict[str, Any]) -> dict[str, Any]:
-        """Patch metadata fields (title, tags, plot, urls, ...). Omits id/number/raw."""
+    async def update_metadata(
+        ctx: RunContext[AgentDeps], metadata_id: int, patch: dict[str, Any]
+    ) -> str | dict[str, Any]:
+        """Patch metadata fields (title, tags, plot, urls, ...). Omits id/number/raw/field_sources."""
         trace_tool(ctx, "tool_call", {"tool": "update_metadata", "metadata_id": metadata_id, "patch": patch})
         if not patch:
             return {"error": "patch 为空"}
         unknown = sorted(set(patch) - _AGENT_PATCH_KEYS)
         if unknown:
-            return {"error": f"不允许的字段: {', '.join(unknown)}"}
+            return unknown_field_error(unknown, _AGENT_PATCH_KEYS)
         row = await ctx.deps.repo.update_metadata(metadata_id, **cast(MetadataFields, patch))
         if row is None:
             return {"error": f"metadata {metadata_id} 不存在"}
-        out = {"id": row.id, "number": row.number, "title": row.title, "updated": True}
-        trace_tool(ctx, "tool_result", {"tool": "update_metadata", "result": out})
-        return out
+        trace_tool(ctx, "tool_result", {"tool": "update_metadata", "result": TOOL_OK})
+        return TOOL_OK
 
     @cap.tool
-    async def attach_user_tag(ctx: RunContext[AgentDeps], metadata_id: int, user_tag_id: int) -> dict[str, Any]:
-        """Attach a user tag to one metadata row."""
+    async def attach_user_tag(ctx: RunContext[AgentDeps], metadata_id: int, user_tag_id: int) -> str | dict[str, Any]:
+        """Attach a user tag to one metadata row (already attached → OK)."""
         trace_tool(
             ctx, "tool_call", {"tool": "attach_user_tag", "metadata_id": metadata_id, "user_tag_id": user_tag_id}
         )
-        ok = await ctx.deps.repo.attach_user_tag(metadata_id, user_tag_id)
-        out = {"ok": ok, "metadata_id": metadata_id, "user_tag_id": user_tag_id}
-        if not ok:
-            out["error"] = "挂载失败 (元数据或标签不存在, 或已挂载)"
-        trace_tool(ctx, "tool_result", {"tool": "attach_user_tag", "result": out})
-        return out
+        if await ctx.deps.repo.get_metadata(metadata_id) is None:
+            return {"error": f"metadata {metadata_id} 不存在"}
+        if await ctx.deps.repo.get_user_tag(user_tag_id) is None:
+            return {"error": f"user_tag {user_tag_id} 不存在"}
+        if not await ctx.deps.repo.attach_user_tag(metadata_id, user_tag_id):
+            return {"error": f"挂载失败: metadata {metadata_id} / user_tag {user_tag_id}"}
+        trace_tool(ctx, "tool_result", {"tool": "attach_user_tag", "result": TOOL_OK})
+        return TOOL_OK
 
     @cap.tool
-    async def detach_user_tag(ctx: RunContext[AgentDeps], metadata_id: int, user_tag_id: int) -> dict[str, Any]:
+    async def detach_user_tag(ctx: RunContext[AgentDeps], metadata_id: int, user_tag_id: int) -> str | dict[str, Any]:
         """Detach a user tag from one metadata row."""
         trace_tool(
             ctx, "tool_call", {"tool": "detach_user_tag", "metadata_id": metadata_id, "user_tag_id": user_tag_id}
         )
-        ok = await ctx.deps.repo.detach_user_tag(metadata_id, user_tag_id)
-        out = {"ok": ok, "metadata_id": metadata_id, "user_tag_id": user_tag_id}
-        if not ok:
-            out["error"] = "取消挂载失败 (关联不存在)"
-        trace_tool(ctx, "tool_result", {"tool": "detach_user_tag", "result": out})
-        return out
+        if not await ctx.deps.repo.detach_user_tag(metadata_id, user_tag_id):
+            return {"error": f"metadata {metadata_id} 未挂载 user_tag {user_tag_id}"}
+        trace_tool(ctx, "tool_result", {"tool": "detach_user_tag", "result": TOOL_OK})
+        return TOOL_OK
 
     @cap.tool
     async def batch_user_tags(
@@ -116,14 +107,14 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
             affected, missing = await ctx.deps.repo.batch_attach_user_tag(metadata_ids, user_tag_id)
         else:
             affected, missing = await ctx.deps.repo.batch_detach_user_tag(metadata_ids, user_tag_id)
-        out = {"action": action, "affected": affected, "missing": missing}
+        out = {"affected": affected, "missing": missing}
         trace_tool(ctx, "tool_result", {"tool": "batch_user_tags", "result": out})
         return out
 
     @cap.tool
     async def merge_metadata(
         ctx: RunContext[AgentDeps], metadata_id: int, selections: dict[str, str]
-    ) -> dict[str, Any]:
+    ) -> str | dict[str, Any]:
         """Merge fields from raw sources: selections maps field_name -> source_key."""
         trace_tool(ctx, "tool_call", {"tool": "merge_metadata", "metadata_id": metadata_id, "selections": selections})
         if not selections:
@@ -137,11 +128,9 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
             return {"error": str(exc)}
         if not updates:
             return {"error": "无有效合并项"}
-        updated = await ctx.deps.repo.update_metadata(metadata_id, **cast(MetadataFields, updates))
-        assert updated is not None
-        out = {"id": updated.id, "number": updated.number, "merged_fields": list(selections)}
-        trace_tool(ctx, "tool_result", {"tool": "merge_metadata", "result": out})
-        return out
+        await ctx.deps.repo.update_metadata(metadata_id, **cast(MetadataFields, updates))
+        trace_tool(ctx, "tool_result", {"tool": "merge_metadata", "result": TOOL_OK})
+        return TOOL_OK
 
     @cap.tool
     async def enqueue_scrape(
@@ -164,7 +153,7 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
         )
         if not metadata_ids:
             return {"error": "metadata_ids 为空"}
-        task_ids: list[int] = []
+        submitted = 0
         missing = 0
         for metadata_id in metadata_ids:
             metadata = await ctx.deps.repo.get_metadata(metadata_id)
@@ -172,16 +161,15 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
                 missing += 1
                 continue
             payload = ScrapePayload(number=metadata.number, content_type=content_type, use_cache=cache_kinds)
-            task = await ctx.deps.repo.create_task(task_type=TaskType.SCRAPE, payload=payload)
-            assert task.id is not None
-            task_ids.append(task.id)
-        out = {"submitted": len(task_ids), "missing": missing, "task_ids": task_ids}
+            await ctx.deps.repo.create_task(task_type=TaskType.SCRAPE, payload=payload)
+            submitted += 1
+        out = {"submitted": submitted, "missing": missing}
         trace_tool(ctx, "tool_result", {"tool": "enqueue_scrape", "result": out})
         return out
 
     @cap.tool
-    async def delete_metadata(ctx: RunContext[AgentDeps], metadata_id: int) -> dict[str, Any]:
-        """Delete one metadata row. Requires user approval."""
+    async def delete_metadata(ctx: RunContext[AgentDeps], metadata_id: int) -> str | dict[str, Any]:
+        """Delete one metadata row."""
         detail = f"删除元数据 id={metadata_id}"
         trace_tool(ctx, "tool_call", {"tool": "delete_metadata", "metadata_id": metadata_id})
         require_approval(
@@ -190,16 +178,14 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
             tool="delete_metadata",
             extra={"metadata_id": metadata_id},
         )
-        ok = await ctx.deps.repo.delete_metadata(metadata_id)
-        out = {"tool": "delete_metadata", "metadata_id": metadata_id, "deleted": ok}
-        if not ok:
-            out["error"] = f"metadata {metadata_id} 不存在"
-        trace_tool(ctx, "tool_result", {"tool": "delete_metadata", "result": out})
-        return out
+        if not await ctx.deps.repo.delete_metadata(metadata_id):
+            return {"error": f"metadata {metadata_id} 不存在"}
+        trace_tool(ctx, "tool_result", {"tool": "delete_metadata", "result": TOOL_OK})
+        return TOOL_OK
 
     @cap.tool
     async def batch_delete_metadata(ctx: RunContext[AgentDeps], metadata_ids: list[int]) -> dict[str, Any]:
-        """Delete many metadata rows. Requires user approval."""
+        """Delete many metadata rows."""
         if not metadata_ids:
             return {"error": "metadata_ids 为空"}
         detail = f"批量删除元数据 ids={metadata_ids}"
@@ -211,12 +197,7 @@ def build_metadata_ops_capability() -> Capability[AgentDeps]:
             extra={"metadata_ids": list(metadata_ids)},
         )
         deleted, missing = await ctx.deps.repo.batch_delete_metadata(metadata_ids)
-        out = {
-            "tool": "batch_delete_metadata",
-            "deleted": deleted,
-            "missing": missing,
-            "metadata_ids": list(metadata_ids),
-        }
+        out = {"deleted": deleted, "missing": missing}
         trace_tool(ctx, "tool_result", {"tool": "batch_delete_metadata", "result": out})
         return out
 

@@ -22,7 +22,7 @@ from amane.plugins.packaging import (
     sources_root,
     uninstall_plugin_tree,
 )
-from tests.plugins.test_plugin_system import plugin_source, write_plugin
+from tests.plugins.test_plugin_system import playback_plugin_source, plugin_source, write_plugin
 
 
 def _zip_bytes(entries: dict[str, str]) -> bytes:
@@ -40,6 +40,15 @@ def test_install_zip_at_root(tmp_path: Path) -> None:
     assert (sources_root(tmp_path) / "acme.fake" / PLUGIN_ENTRY).is_file()
     manager = PluginManager.discover(tmp_path)
     assert manager.has_plugin("acme.fake")
+
+
+def test_install_zip_playback_only(tmp_path: Path) -> None:
+    payload = _zip_bytes({PLUGIN_ENTRY: playback_plugin_source("acme.play")})
+    plugin_id = install_plugin_zip(tmp_path, payload)
+    assert plugin_id == "acme.play"
+    manager = PluginManager.discover(tmp_path)
+    assert manager.has_playback_plugin("acme.play")
+    assert not manager.has_film_plugin("acme.play")
 
 
 def test_install_zip_nested_folder(tmp_path: Path) -> None:
@@ -74,6 +83,15 @@ def test_install_rejects_oversized_zip(tmp_path: Path) -> None:
 def test_install_rejects_missing_entry(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match=PLUGIN_ENTRY):
         install_plugin_zip(tmp_path, _zip_bytes({"readme.txt": "nope"}))
+
+
+def test_install_reports_unimportable_module_as_payload_error(tmp_path: Path) -> None:
+    """插件 import 不到的模块是载荷错误 (路由据此报 422), 不是未处理异常."""
+    source = plugin_source("acme.fake") + "\nimport amane_missing_test_dependency\n"
+    with pytest.raises(ValueError, match=r"导入失败.*amane_missing_test_dependency"):
+        install_plugin_zip(tmp_path, _zip_bytes({PLUGIN_ENTRY: source}))
+    assert not (sources_root(tmp_path) / "acme.fake").exists()
+    assert not (sources_root(tmp_path) / ".staging").exists()
 
 
 def test_install_path_copies_directory(tmp_path: Path) -> None:

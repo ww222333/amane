@@ -17,7 +17,7 @@ from amane.agent.executor import QueryExecutor
 from amane.agent.metadata_ops import build_metadata_ops_capability
 from amane.agent.runtime import build_agent
 from amane.agent.sql import ReadonlySqlSandbox
-from amane.agent.tools import AgentDeps, build_explore_toolset
+from amane.agent.tools import TOOL_OK, AgentDeps, build_explore_toolset
 from amane.agent.trace import TraceEvent
 from amane.config import AgentConfig
 from amane.db.repository import Repository
@@ -106,11 +106,21 @@ async def test_update_metadata_tool(write_deps: AgentDeps) -> None:
     mid = items[0].id
     assert mid is not None
     out = await _tool_fn("update_metadata")(_Ctx(write_deps), metadata_id=mid, patch={"title": "Patched"})
-    assert out.get("updated") is True
-    assert out.get("title") == "Patched"
+    assert out == TOOL_OK
     row = await write_deps.repo.get_metadata(mid)
     assert row is not None
     assert row.title == "Patched"
+
+
+@pytest.mark.asyncio
+async def test_update_metadata_rejects_unknown_field_with_writable_list(write_deps: AgentDeps) -> None:
+    """拒绝未知字段时须一并回可写字段, 否则模型只能反复试探."""
+    items, _total = await write_deps.repo.list_metadata(limit=10)
+    mid = items[0].id
+    assert mid is not None
+    out = await _tool_fn("update_metadata")(_Ctx(write_deps), metadata_id=mid, patch={"nope": 1})
+    assert out["error"].startswith("不允许的字段: nope; 可写字段: ")
+    assert "title" in out["error"]
 
 
 @pytest.mark.asyncio
@@ -124,6 +134,31 @@ async def test_delete_metadata_registers_approval(write_deps: AgentDeps) -> None
     result = await _tool_fn("delete_metadata")(
         _Ctx(write_deps, tool_call_id="tc-del-md", tool_call_approved=True), metadata_id=1
     )
-    assert result.get("tool") == "delete_metadata"
-    assert result.get("metadata_id") == 1
-    assert "deleted" in result
+    assert result == TOOL_OK
+    assert await write_deps.repo.get_metadata(1) is None
+
+
+@pytest.mark.asyncio
+async def test_user_tag_tools_name_the_missing_input(write_deps: AgentDeps) -> None:
+    """挂载 / 取消挂载的失败须点名出错输入: 混在一句里模型无法判断该改哪个参数."""
+    items, _total = await write_deps.repo.list_metadata(limit=1)
+    metadata_id = items[0].id
+    assert metadata_id is not None
+    tag = await write_deps.repo.create_user_tag("标签")
+    assert tag.id is not None
+
+    assert await _tool_fn("attach_user_tag")(_Ctx(write_deps), metadata_id=9999, user_tag_id=tag.id) == {
+        "error": "metadata 9999 不存在"
+    }
+    assert await _tool_fn("attach_user_tag")(_Ctx(write_deps), metadata_id=metadata_id, user_tag_id=9999) == {
+        "error": "user_tag 9999 不存在"
+    }
+
+    assert await _tool_fn("attach_user_tag")(_Ctx(write_deps), metadata_id=metadata_id, user_tag_id=tag.id) == TOOL_OK
+    # 已挂载是幂等成功, 不是第三种失败成因
+    assert await _tool_fn("attach_user_tag")(_Ctx(write_deps), metadata_id=metadata_id, user_tag_id=tag.id) == TOOL_OK
+
+    assert await _tool_fn("detach_user_tag")(_Ctx(write_deps), metadata_id=metadata_id, user_tag_id=tag.id) == TOOL_OK
+    assert await _tool_fn("detach_user_tag")(_Ctx(write_deps), metadata_id=metadata_id, user_tag_id=tag.id) == {
+        "error": f"metadata {metadata_id} 未挂载 user_tag {tag.id}"
+    }

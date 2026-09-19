@@ -6,10 +6,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import httpx2 as httpx
 import structlog
 
 from ..config import R18Config
 from ..crawlers import actor_registry, registry
+from ..crawlers.base import CrawlerProfile
 from ..crawlers.factory import CrawlerFactory
 from ..crawlers.http import HttpClient
 from ..crawlers.r18dev import R18Database
@@ -30,6 +32,7 @@ from ..handlers import (
 from ..llm import TranslationCache, build_translator
 from ..media.watermarks import user_watermark_dir
 from ..net.http import RateLimiters, WebClient
+from ..playback import PlaybackFactory, PlaybackState
 from ..plugins.manager import PluginManager
 from ..plugins.packaging import install_plugin_path, install_plugin_zip, uninstall_plugin_tree
 from ..scheduler.worker import AsyncWorker
@@ -69,15 +72,29 @@ def build_network_stack(
 ) -> NetworkStack:
     """bootstrap 与热重载共用. r18_db 为会话级只读引擎, 热重载时复用同一实例, 不随配置重建."""
     site_urls: dict[str, list[str]] = {}
+    referer_hosts: set[str] = set()
+    site_config = hot.scraping.site_config
+
+    def _register_site(site: str, profile: CrawlerProfile) -> None:
+        urls = [*profile.urls, profile.base_url]
+        site_urls[site] = urls
+        if not profile.same_origin_referer:
+            return
+        # 用户配置的镜像域同样纳入, 否则图片仍按裸请求发出.
+        configured = site_config.get(site)
+        for raw in (configured.base_url if configured else None, *urls):
+            host = httpx.URL(raw).host if raw else None
+            if host is not None:
+                referer_hosts.add(host)
+
     for site in registry.sites():
         crawler_cls = registry.get(site)
         if crawler_cls:
-            site_urls[str(site)] = [*crawler_cls.profile().urls, crawler_cls.profile().base_url]
+            _register_site(site, crawler_cls.profile())
     for name in actor_registry.sites():
         crawler_cls = actor_registry.get(name)
         if crawler_cls:
-            site = SiteName(name)
-            site_urls[str(site)] = [*crawler_cls.profile().urls, crawler_cls.profile().base_url]
+            _register_site(str(SiteName(name)), crawler_cls.profile())
 
     plugin_rates: dict[str, float | None] = {}
     if plugin_manager is not None:
@@ -99,6 +116,7 @@ def build_network_stack(
         max_retries=hot.network.max_retries,
         max_clients=hot.network.max_clients,
         limiters=limiters,
+        same_origin_referer_hosts=frozenset(referer_hosts),
     )
     http_client = HttpClient(web=web_client, browser=None)
     factory = CrawlerFactory(
@@ -148,6 +166,8 @@ class AppRuntime:
     r18_db: R18Database | None = None
     agent_service: AgentService | None = None
     plugin_manager: PluginManager | None = None
+    playback_factory: PlaybackFactory | None = None
+    playback_state: PlaybackState = field(default_factory=PlaybackState)
 
     _r18_config: R18Config | None = field(default=None, repr=False)
     _old_r18_db: R18Database | None = field(default=None, repr=False)
@@ -214,6 +234,25 @@ class AppRuntime:
         if self.agent_service is not None:
             self.agent_service.rebuild(hot.agent)
 
+        previous_playback = self.playback_factory
+        # 新的 Factory 构造时丢弃解析结果缓存 (配置改动可能更换凭据); token 表与探测缓存仍在
+        # ``playback_state`` 里, 只有插件集合变化才 reset().
+        current_playback = PlaybackFactory(
+            plugin_manager=self.plugin_manager,
+            plugin_configs=hot.plugins,
+            http_client=self.http_client,
+            web_client=self.web_client,
+            data_dir=self.config.cold.data_dir,
+            proxy=hot.network.proxy,
+            state=self.playback_state,
+        )
+        if previous_playback is not None and set(previous_playback.playback_source_ids()) != set(
+            current_playback.playback_source_ids()
+        ):
+            # 插件集合变化 (安装 / 卸载 / 重载 / 启停): 已签发的 token 与探测缓存必须失效.
+            self.playback_state.reset()
+        self.playback_factory = current_playback
+
         return old_worker
 
     async def apply_rebuild(self) -> None:
@@ -258,10 +297,13 @@ class AppRuntime:
 
     async def _apply_rebuild_unlocked(self) -> None:
         """必须持有 ``_rebuild_lock``."""
+        old_playback = self.playback_factory
         old_worker = self.rebuild()
         await old_worker.stop()
         self.worker.start()
         await self.dispose_old_r18()
+        if old_playback is not None:
+            await old_playback.aclose()
 
     def _replace_plugin_manager(self, discovered: PluginManager) -> None:
         discovered.validate_hot_settings(self.config.hot, require_available=False)
@@ -303,12 +345,14 @@ def build_handlers(
     # 译文缓存是会话级, 热重载时复用同一实例.
     translator = build_translator(
         enabled=hot.llm.enabled,
+        api_type=hot.llm.api_type,
         api_key=hot.llm.api_key,
         base_url=hot.llm.base_url,
         model=hot.llm.model,
-        max_retries=hot.llm.max_retries,
         rate_limit=hot.llm.rate_limit,
         proxy=hot.network.proxy,
+        system_prompt=hot.llm.system_prompt,
+        field_prompts=hot.llm.field_prompts,
         cache=translation_cache,
     )
     library_locks = LibraryTaskLocks()

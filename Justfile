@@ -143,16 +143,14 @@ macos-app: sync build
 windows-app: sync build
     pwsh -NoProfile -File scripts/build_windows_app.ps1
 
-# Run the menu bar UI standalone against a running dev server
-bar-run:
-    cd macapp && swift run AmaneUI --base-url http://{{ host }}:{{ port }}
+# SPA 由服务端提供, 不依赖 web/dist; 无 androidapp/keystore.properties 时退回 debug 包
+# 构建 Android 壳的 APK (需 JDK 17+ 与 Android SDK)
+android-app:
+    bash scripts/build_android_app.sh
 
-# Tray-only against a running dev server (Windows; no supervisor)
-[env('AMANE_UI_ONLY', '1')]
-[env('AMANE_HOST', host)]
-[env('AMANE_PORT', port)]
-windows-bar:
-    dotnet run --project winapp
+# 编译 Android 壳并运行单元测试 (CI 门禁; 需 JDK 17+ 与 Android SDK)
+android-check:
+    ./androidapp/gradlew -p androidapp --console=plain :app:assembleDebug :app:testDebugUnitTest
 
 # Full local gate: generate → fix → check → build
 all: generate fix check build

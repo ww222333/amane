@@ -51,6 +51,8 @@ function KindFacetPicker({
 }) {
   const { t } = useTranslation("metadata");
   const [search, setSearch] = useState("");
+  // 浮层保持默认 portal, 不因"面板在抽屉里"而改成 `withinPortal: false`:
+  // 实测浮层挂到 body 上不会关掉抽屉 (依据见 docs/dev/frontend.md).
 
   const { data, isFetching } = useQuery({
     ...listFacetsOptions({

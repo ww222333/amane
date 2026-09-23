@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.8
+
+### 修复
+
+- **内容路由刮削站点下拉为空**: `augment_config_schema` 将已发现的影片源 ID 写入 `ContentRouteEntry.sites` 枚举 (适配 `{sites, prefixes}` 路由结构)
+
 ## v1.0.7
 
 ### 新功能

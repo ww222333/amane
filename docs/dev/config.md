@@ -57,7 +57,7 @@ RateLimiters → WebClient → HttpClient → CrawlerFactory
 
 `x-frozen-keys` 全量 dict (`site_config` / `content_routes` / `field_language`): `default_factory` 只在整段缺席时生效; 文件里已有该字段但缺 key 时, 校验按代码枚举补默认并丢弃未知 key. UI 不能加 key, 不补则新项无法配置. `GET /api/config` 始终返回全集.
 
-`content_routes`、`field_priority` 与 `field_blacklist` 的值允许第三方 `namespace.local` 来源 ID, 实际可用性由 `PluginManager` 校验; 已禁用或未安装的来源可以留在路由里, 刮削时跳过, 不阻断启动或配置写入. 插件自己的配置放入 `plugins.<source_id>`, 由插件提供的 Pydantic model 校验, 不放入 `site_config`.
+`content_routes`、`field_priority` 与 `field_blacklist` 的值允许第三方 `namespace.local` 来源 ID, 实际可用性由 `PluginManager` 校验; 已禁用或未安装的来源可以留在路由里, 刮削时跳过, 不阻断启动或配置写入. 插件自己的配置放入 `plugins.<source_id>`, 由插件提供的 Pydantic model 校验, 不放入 `site_config`. `GET /api/config/schema` 经 `augment_config_schema` 把已发现的影片源 ID 写入 `ContentRouteEntry.sites` 与字段优先级 / 黑名单的枚举; 安装插件不会自动加入某条路由, 须在内容路由中手动添加.
 
 `AMANE_SUPERVISED=1` 声明进程外监督者在场 (compose 与桌面壳设置). 不允许在无监督循环的 `amane.server` 内设置该变量, 否则 `exit 3` 会使进程退出且无人再次启动. 为真时 `POST /api/system/restart` 可用. 不探测 cgroup, 以免在 K8s 里误开应用内重启.
 

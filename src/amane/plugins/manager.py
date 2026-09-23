@@ -209,6 +209,22 @@ class PluginManager:
         defs = out.get("$defs")
         if not isinstance(defs, dict):
             return out
+
+        source_ids = [
+            descriptor.id for descriptor in self.descriptors() if descriptor.supports(SourceCapability.FILM_METADATA)
+        ]
+
+        # content_routes 值为 ContentRouteEntry; 站点枚举在 Entry.sites.items
+        entry = defs.get("ContentRouteEntry")
+        if isinstance(entry, dict):
+            entry_props = entry.get("properties")
+            if isinstance(entry_props, dict):
+                sites_field = entry_props.get("sites")
+                if isinstance(sites_field, dict):
+                    site_items = sites_field.get("items")
+                    if isinstance(site_items, dict):
+                        site_items["enum"] = source_ids
+
         scraping = defs.get("ScrapingConfig")
         if not isinstance(scraping, dict):
             return out
@@ -216,10 +232,8 @@ class PluginManager:
         if not isinstance(properties, dict):
             return out
 
-        source_ids = [
-            descriptor.id for descriptor in self.descriptors() if descriptor.supports(SourceCapability.FILM_METADATA)
-        ]
-        for field_name in ("content_routes", "field_priority", "field_blacklist"):
+        # field_priority / field_blacklist 仍是「字段 → 站点列表」
+        for field_name in ("field_priority", "field_blacklist"):
             field = properties.get(field_name)
             if not isinstance(field, dict):
                 continue

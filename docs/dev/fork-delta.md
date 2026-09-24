@@ -38,6 +38,14 @@
 
 见 [task-system.md](task-system.md) `ORGANIZE`.
 
+## 插件连通测试
+
+- 影片元数据插件可选声明 `supports_connectivity_test` 并实现 `FilmSourceProvider.test`.
+- `POST /api/plugins/{id}/test` 用当前 (可覆盖) 配置临时构造 provider 做连通 / Cookie 检查, 不入队、不写配置.
+- 仅声明支持的插件在配置页显示测试按钮; 内置站点不走此接口.
+
+见 [plugins.md](plugins.md).
+
 ## 版本线
 
 本仓库 CHANGELOG 在上游 `0.16.x` 条目之上, 另以 `v1.0.x` 记录上述独有能力的发版说明.

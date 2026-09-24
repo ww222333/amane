@@ -32,6 +32,15 @@ class EmptyPluginConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+class FilmSourceTestResult(BaseModel):
+    """影片来源连通测试结果; 不写入任务记录."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    ok: bool
+    detail: str = ""
+
+
 class FilmSourceProvider(ABC):
     """Minimal runtime contract consumed by the aggregate engine."""
 
@@ -39,6 +48,14 @@ class FilmSourceProvider(ABC):
     async def fetch(self, query: SearchQuery, options: FetchOptions | None = None) -> MediaMetadata | None:
         """Fetch metadata for one structured search query."""
         ...
+
+    async def test(self) -> FilmSourceTestResult:
+        """可选的连通 / Cookie 检查.
+
+        默认表示本源未实现测试; 插件覆盖本方法以返回真实结果.
+        主机经 ``POST /api/plugins/{id}/test`` 调用, 不入队刮削任务.
+        """
+        return FilmSourceTestResult(ok=False, detail="该来源不支持连通测试")
 
 
 class PlaybackMediaFile(BaseModel):
@@ -339,6 +356,9 @@ class FilmSourcePlugin(_ConfiguredPlugin):
     when the source catalog is discovered (startup, install, uninstall, or reload);
     providers are then cached by ``CrawlerFactory`` until the next rebuild.
     """
+
+    #: 为真时配置页展示「测试」; 须同时覆盖 ``FilmSourceProvider.test``.
+    supports_connectivity_test: ClassVar[bool] = False
 
     @abstractmethod
     def build(self, context: PluginContext, config: BaseModel) -> FilmSourceProvider:

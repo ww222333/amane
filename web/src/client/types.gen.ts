@@ -2546,6 +2546,40 @@ export type PluginResponse = {
      * Path
      */
     path?: string | null;
+    /**
+     * Supports Test
+     */
+    supports_test?: boolean;
+};
+
+/**
+ * PluginTestRequest
+ *
+ * 连通测试请求; ``config`` 覆盖已保存项后用于构造临时 provider, 不写回配置.
+ */
+export type PluginTestRequest = {
+    /**
+     * Config
+     */
+    config?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * PluginTestResponse
+ *
+ * 连通测试响应, 形状与 ``FilmSourceTestResult`` 相同.
+ */
+export type PluginTestResponse = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Detail
+     */
+    detail?: string;
 };
 
 /**
@@ -4770,6 +4804,36 @@ export type ReloadPluginsResponses = {
 };
 
 export type ReloadPluginsResponse = ReloadPluginsResponses[keyof ReloadPluginsResponses];
+
+export type TestPluginData = {
+    body: PluginTestRequest;
+    path: {
+        /**
+         * Plugin Id
+         */
+        plugin_id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{plugin_id}/test';
+};
+
+export type TestPluginErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TestPluginError = TestPluginErrors[keyof TestPluginErrors];
+
+export type TestPluginResponses = {
+    /**
+     * Successful Response
+     */
+    200: PluginTestResponse;
+};
+
+export type TestPluginResponse = TestPluginResponses[keyof TestPluginResponses];
 
 export type UninstallPluginData = {
     body?: never;

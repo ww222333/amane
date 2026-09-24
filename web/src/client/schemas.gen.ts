@@ -5201,6 +5201,11 @@ export const PluginResponseSchema = {
                 }
             ],
             title: 'Path'
+        },
+        supports_test: {
+            type: 'boolean',
+            title: 'Supports Test',
+            default: false
         }
     },
     type: 'object',
@@ -5210,6 +5215,40 @@ export const PluginResponseSchema = {
         'config_schema'
     ],
     title: 'PluginResponse'
+} as const;
+
+export const PluginTestRequestSchema = {
+    properties: {
+        config: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Config'
+        }
+    },
+    type: 'object',
+    title: 'PluginTestRequest',
+    description: '连通测试请求; ``config`` 覆盖已保存项后用于构造临时 provider, 不写回配置.'
+} as const;
+
+export const PluginTestResponseSchema = {
+    properties: {
+        ok: {
+            type: 'boolean',
+            title: 'Ok'
+        },
+        detail: {
+            type: 'string',
+            title: 'Detail',
+            default: ''
+        }
+    },
+    additionalProperties: false,
+    type: 'object',
+    required: [
+        'ok'
+    ],
+    title: 'PluginTestResponse',
+    description: '连通测试响应, 形状与 ``FilmSourceTestResult`` 相同.'
 } as const;
 
 export const R18ConfigSchema = {

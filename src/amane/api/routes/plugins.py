@@ -4,12 +4,25 @@ from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile
 from pydantic import ValidationError
 
 from ...config import ConfigManager, PluginConfig
+from ...net.errors import SourceError
+from ...plugins.api import FilmSourcePlugin, PluginContext
 from ...plugins.manager import PluginManager
 from ..deps import ConfigDep, PluginManagerDep, RuntimeDep
-from ..models.plugins import PluginConfigUpdate, PluginListResponse, PluginResponse
+from ..models.plugins import (
+    PluginConfigUpdate,
+    PluginListResponse,
+    PluginResponse,
+    PluginTestRequest,
+    PluginTestResponse,
+)
 from ..support.path_validation import validate_plugin_install_path
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
+
+
+def _supports_test(manager: PluginManager, plugin_id: str) -> bool:
+    plugin = manager.get(plugin_id)
+    return isinstance(plugin, FilmSourcePlugin) and type(plugin).supports_connectivity_test
 
 
 def _plugin_response(manager: PluginManager, config: PluginConfig, plugin_id: str) -> PluginResponse:
@@ -22,6 +35,7 @@ def _plugin_response(manager: PluginManager, config: PluginConfig, plugin_id: st
         config=config,
         config_schema=manager.plugin_config_schema(plugin_id),
         path=origin.path if origin is not None else None,
+        supports_test=_supports_test(manager, plugin_id),
     )
 
 
@@ -69,6 +83,49 @@ async def install_plugin(
 async def reload_plugins(config: ConfigDep, runtime: RuntimeDep) -> PluginListResponse:
     manager = await runtime.reload_plugins()
     return _plugin_list(manager, config)
+
+
+@router.post("/{plugin_id}/test", response_model=PluginTestResponse)
+async def test_plugin(
+    plugin_id: str,
+    req: PluginTestRequest,
+    config: ConfigDep,
+    runtime: RuntimeDep,
+    manager: PluginManagerDep,
+) -> PluginTestResponse:
+    """用当前 (可覆盖) 配置构造临时 provider 并调用 ``test``; 不写配置、不入队任务."""
+    plugin = manager.get(plugin_id)
+    if plugin is None:
+        raise HTTPException(status_code=404, detail="插件不存在")
+    if not isinstance(plugin, FilmSourcePlugin):
+        raise HTTPException(status_code=422, detail="仅影片元数据插件支持连通测试")
+
+    saved = config.hot.plugins.get(plugin_id, PluginConfig())
+    merged = PluginConfig(enabled=saved.enabled, config={**saved.config, **req.config})
+    try:
+        manager.validate_plugin_config(plugin_id, merged)
+    except (ValidationError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    data_dir = config.cold.data_dir / "plugins" / plugin_id
+    data_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        provider = manager.build_plugin_provider(
+            plugin_id,
+            context=PluginContext(
+                source_id=plugin_id,
+                http_client=runtime.http_client,
+                web_client=runtime.http_client.web_client,
+                data_dir=data_dir,
+            ),
+            config=merged,
+        )
+        result = await provider.test()
+    except SourceError as exc:
+        return PluginTestResponse(ok=False, detail=exc.detail or str(exc.reason))
+    except (KeyError, TypeError, ValueError, OSError) as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return PluginTestResponse(ok=result.ok, detail=result.detail)
 
 
 @router.get("/{plugin_id}", response_model=PluginResponse)

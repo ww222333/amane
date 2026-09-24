@@ -42,7 +42,14 @@ class TestPluginsApi:
         assert data["items"][0]["config"]["enabled"] is True
         assert data["items"][0]["path"] is not None
         assert data["items"][0]["path"].endswith("acme.fake")
+        assert data["items"][0]["supports_test"] is False
 
+        default_test = await client.post("plugins/acme.fake/test", json={})
+        assert default_test.status_code == 200
+        assert default_test.json()["ok"] is False
+        assert "不支持" in default_test.json()["detail"]
+
+        assert (await client.post("plugins/acme.missing/test", json={})).status_code == 404
         assert (await client.get("plugins/acme.missing")).status_code == 404
         assert (await client.patch("plugins/acme.missing", json={"enabled": False, "config": {}})).status_code == 404
 
@@ -134,3 +141,89 @@ class TestPluginsApi:
         assert response.status_code == 201, response.text
         ids = [item["descriptor"]["id"] for item in response.json()["items"]]
         assert "acme.extra" in ids
+
+
+_TESTABLE_PLUGIN = """
+from pydantic import BaseModel, ConfigDict
+
+from amane.plugin import (
+    FilmSourcePlugin,
+    FilmSourceProvider,
+    FilmSourceTestResult,
+    MediaMetadata,
+    PluginContext,
+    SearchQuery,
+    SourceCapability,
+    SourceDescriptor,
+)
+
+
+class _Config(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    endpoint: str = "https://plugin.example.test"
+    token: str = ""
+
+
+class _Provider(FilmSourceProvider):
+    def __init__(self, token: str) -> None:
+        self._token = token
+
+    async def fetch(self, query: SearchQuery, options=None) -> MediaMetadata:
+        return MediaMetadata(number=query.number, title="Plugin result")
+
+    async def test(self) -> FilmSourceTestResult:
+        if self._token == "good":
+            return FilmSourceTestResult(ok=True, detail="连通正常")
+        return FilmSourceTestResult(ok=False, detail="token 无效")
+
+
+class Plugin(FilmSourcePlugin):
+    config_model = _Config
+    supports_connectivity_test = True
+
+    @classmethod
+    def descriptor(cls) -> SourceDescriptor:
+        return SourceDescriptor(
+            id="acme.probe",
+            name="Probe plugin",
+            version="0.1.0",
+            capabilities=frozenset({SourceCapability.FILM_METADATA}),
+            content_types=frozenset({"censored"}),
+            urls=("https://plugin.example.test",),
+        )
+
+    def build(self, context: PluginContext, config: BaseModel) -> FilmSourceProvider:
+        assert isinstance(config, _Config)
+        return _Provider(config.token)
+"""
+
+
+class TestPluginConnectivity:
+    @pytest.fixture
+    def app(self, tmp_path: Path):
+        data_dir = tmp_path / "data"
+        write_plugin(data_dir, "acme.probe", body=_TESTABLE_PLUGIN)
+        hot = HotSettings.model_validate(
+            {
+                "plugins": {"acme.probe": {"config": {"token": "bad"}}},
+            }
+        )
+        return make_app(hot, data_dir, tmp_path / "logs", tmp_path / "files")
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_opt_in_test_uses_override_without_saving(self, client):
+        listed = await client.get("plugins")
+        assert listed.status_code == 200
+        item = next(i for i in listed.json()["items"] if i["descriptor"]["id"] == "acme.probe")
+        assert item["supports_test"] is True
+
+        saved = await client.post("plugins/acme.probe/test", json={})
+        assert saved.status_code == 200
+        assert saved.json() == {"ok": False, "detail": "token 无效"}
+
+        override = await client.post("plugins/acme.probe/test", json={"config": {"token": "good"}})
+        assert override.status_code == 200
+        assert override.json() == {"ok": True, "detail": "连通正常"}
+
+        still = await client.get("plugins/acme.probe")
+        assert still.json()["config"]["config"]["token"] == "bad"

@@ -4,6 +4,7 @@ import {
   installPluginMutation,
   listPluginsOptions,
   reloadPluginsMutation,
+  testPluginMutation,
   uninstallPluginMutation,
   updatePluginMutation,
 } from "@/client/@tanstack/react-query.gen";
@@ -23,6 +24,13 @@ export function useUpdatePlugin() {
     mutationOptions: updatePluginMutation(),
     invalidates: [pluginListKey],
     successToast: t("toast.configSaved"),
+  });
+}
+
+/** 连通测试不写配置、不失效列表; toast 由调用方按 ok/detail 展示. */
+export function useTestPlugin() {
+  return useAppMutation({
+    mutationOptions: testPluginMutation(),
   });
 }
 

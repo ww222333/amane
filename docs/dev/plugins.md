@@ -42,7 +42,16 @@ descriptor 声明来源能力、支持的内容类型、语言、访问 URL、�
 
 校验顺序是: 构造候选 HotSettings → 由当前插件目录校验路由和插件配置 → 原子写入 TOML → 重建网络栈、Factory 和 Worker; 校验失败不修改当前配置. `enabled=false` 只让 Factory 跳过该来源, 不必先从路由里删掉, 配置仍可写入; 更新单个插件配置时不会因为路由里还有其它缺失插件而拒绝.
 
-插件配置 API: `GET /api/plugins` (发现结果 / descriptor / 配置 / JSON Schema)、`POST /api/plugins` (安装, `multipart/form-data` 二选一: `file` 为浏览器 zip, `path` 为 `safe_dirs` 内的插件目录或 zip)、`POST /api/plugins/reload` (只重新扫描 `plugins/sources`, 必须注册在 `/{plugin_id}` 之前)、`GET|PATCH|DELETE /api/plugins/{plugin_id}`.
+插件配置 API: `GET /api/plugins` (发现结果 / descriptor / 配置 / JSON Schema)、`POST /api/plugins` (安装, `multipart/form-data` 二选一: `file` 为浏览器 zip, `path` 为 `safe_dirs` 内的插件目录或 zip)、`POST /api/plugins/reload` (只重新扫描 `plugins/sources`, 必须注册在 `/{plugin_id}` 之前)、`GET|PATCH|DELETE /api/plugins/{plugin_id}`、`POST /api/plugins/{plugin_id}/test` (连通测试).
+
+## 连通测试
+
+影片元数据插件可选用的钩子, 不入队刮削任务, 不写配置.
+
+- `FilmSourcePlugin.supports_connectivity_test = True` 时, `PluginResponse.supports_test` 为真, 配置页展示「测试」按钮; 默认 `False`, 不声明则无按钮.
+- 覆盖 `FilmSourceProvider.test()` 返回 `FilmSourceTestResult` (`ok` / `detail`). 默认实现返回 `ok=False` 与「不支持」说明.
+- `POST /api/plugins/{id}/test` 请求体可选 `config` 覆盖已保存项后构造**临时** provider 再调用 `test`; 覆盖不落盘. 非影片元数据插件 422. `SourceError` 转为 `ok=False` 与 `detail`, 不 5xx.
+- 内置站点与播放源不走此接口; 播放源仍用 `probe`.
 
 ## 播放源
 

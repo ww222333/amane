@@ -2000,6 +2000,59 @@
         }
       }
     },
+    "/api/plugins/{plugin_id}/test": {
+      "post": {
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Test Plugin",
+        "description": "用当前 (可覆盖) 配置构造临时 provider 并调用 ``test``; 不写配置、不入队任务.",
+        "operationId": "test_plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plugin Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginTestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/plugins/{plugin_id}": {
       "get": {
         "tags": [
@@ -10745,6 +10798,11 @@
               }
             ],
             "title": "Path"
+          },
+          "supports_test": {
+            "type": "boolean",
+            "title": "Supports Test",
+            "default": false
           }
         },
         "type": "object",
@@ -10754,6 +10812,38 @@
           "config_schema"
         ],
         "title": "PluginResponse"
+      },
+      "PluginTestRequest": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          }
+        },
+        "type": "object",
+        "title": "PluginTestRequest",
+        "description": "连通测试请求; ``config`` 覆盖已保存项后用于构造临时 provider, 不写回配置."
+      },
+      "PluginTestResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "PluginTestResponse",
+        "description": "连通测试响应, 形状与 ``FilmSourceTestResult`` 相同."
       },
       "R18Config": {
         "properties": {

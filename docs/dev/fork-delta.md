@@ -46,6 +46,13 @@
 
 见 [plugins.md](plugins.md).
 
+## 插件可选 TLS 指纹
+
+- `WebClient.request` 接受可选 `impersonate` (curl_cffi 浏览器类型), 覆盖本请求指纹; 省略则用会话默认.
+- 供第三方源在带 Cloudflare Cookie 时对齐浏览器形态; 出口 IP 仍须与拿 Cookie 的客户端一致.
+
+见 [plugins.md](plugins.md).
+
 ## 版本线
 
 本仓库 CHANGELOG 在上游 `0.16.x` 条目之上, 另以 `v1.0.x` 记录上述独有能力的发版说明.

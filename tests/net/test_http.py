@@ -110,3 +110,15 @@ class TestSameOriginReferer:
         await client.request("GET", "https://www.javbus.com/pics/cover/1.jpg")
 
         assert session.calls[0]["headers"] == {"Referer": "https://www.javbus.com/"}
+
+    @pytest.mark.asyncio
+    async def test_request_forwards_impersonate(self, monkeypatch):
+        client = WebClient(limiters=RateLimiters(default_rate=100))
+        session = _StubSession()
+        monkeypatch.setattr(client, "_session", session)
+
+        await client.request("GET", "https://example.com/", impersonate="chrome131")
+        assert session.calls[0]["impersonate"] == "chrome131"
+
+        await client.request("GET", "https://example.com/")
+        assert "impersonate" not in session.calls[1]

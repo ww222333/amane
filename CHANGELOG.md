@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.10
+
+### 新功能
+
+- **WebClient 按请求覆盖浏览器指纹**: `request(..., impersonate=...)` 可指定 curl_cffi 指纹; 省略则沿用会话默认. 供插件在 Cloudflare 等场景与 Cookie 浏览器对齐 TLS 指纹 (仍须同出口 IP)
+
 ## v1.0.9
 
 ### 新功能

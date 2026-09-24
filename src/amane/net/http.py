@@ -187,8 +187,12 @@ class WebClient:
         timeout: float | None = None,
         allow_redirects: bool = True,
         ok_statuses: frozenset[int] | None = None,
+        impersonate: BrowserTypeLiteral | None = None,
     ) -> Response:
-        """``ok_statuses`` 额外视为成功 (例如 RSS 304), 不重试、不当失败. 重试用尽后抛 ``RequestError``."""
+        """``ok_statuses`` 额外视为成功 (例如 RSS 304), 不重试、不当失败. 重试用尽后抛 ``RequestError``.
+
+        ``impersonate`` 覆盖本请求的 TLS / 浏览器指纹; ``None`` 时沿用会话构造时的默认值.
+        """
         host = httpx.URL(url).host
         headers = _with_same_origin_referer(host, headers, self._same_origin_referer_hosts)
         await self._limiters.get(host).acquire()
@@ -199,17 +203,18 @@ class WebClient:
         for attempt in range(self._max_retries):
             should_retry = False
             try:
-                resp: Response = await self._session.request(
-                    method,
-                    url,
-                    headers=headers,
-                    cookies=cookies,
-                    data=data,
-                    json=json,
-                    proxy=self._proxy if use_proxy else None,
-                    timeout=timeout or self._timeout,
-                    allow_redirects=allow_redirects,
-                )
+                req_kwargs: dict[str, Any] = {
+                    "headers": headers,
+                    "cookies": cookies,
+                    "data": data,
+                    "json": json,
+                    "proxy": self._proxy if use_proxy else None,
+                    "timeout": timeout or self._timeout,
+                    "allow_redirects": allow_redirects,
+                }
+                if impersonate is not None:
+                    req_kwargs["impersonate"] = impersonate
+                resp: Response = await self._session.request(method, url, **req_kwargs)
                 last_resp = resp
 
                 extra_ok = ok_statuses or frozenset()

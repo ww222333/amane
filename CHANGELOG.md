@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.9
+
+### 新功能
+
+- **插件连通测试**: 影片元数据插件可声明 `supports_connectivity_test` 并实现 `test`; 配置页对支持的插件显示「测试连通」(`POST /api/plugins/{id}/test`, 不入队、不写配置)
+
 ## v1.0.8
 
 ### 修复

@@ -10,11 +10,19 @@ from ..config import HotSettings, WatermarkConfig
 from ..db.models import Library, MediaFile
 from ..db.repo_types import MediaFileUpdates
 from ..enums import ActorGender, DownloadableResource, LinkMode
-from ..library import MEDIA_EXTENSIONS, TRASH_DIRNAME, LibraryFileKind, LibraryScan, fail_dir_for_scan
+from ..library import (
+    MEDIA_EXTENSIONS,
+    TRASH_DIRNAME,
+    LibraryFileKind,
+    LibraryScan,
+    ancestor_dirs,
+    fail_dir_for_scan,
+    prune_empty_dirs,
+)
 from ..library.rules import is_in_fail_dir, is_in_trash, validate_fail_dir
 from ..media import ResourceStore, apply_cover_watermarks_from_info, crop_poster
 from ..media import write_nfo as write_nfo_file
-from ..media.pipeline import RESOURCE_URL_PREFIX
+from ..media.resource_store import internal_url_hash
 from ..net.http import WebClient
 from ..organize import (
     MoveMode,
@@ -72,7 +80,7 @@ async def execute_file_operations(
     source_path = await existing_disk_path(Path(media_file.path))
     if source_path is None:
         logger.warning("source file missing", path=media_file.path)
-        return FileOperationsResult(success=False, error=f"Source file not found: {media_file.path}")
+        return FileOperationsResult(success=False, error=f"源文件不存在: {media_file.path}")
 
     info = file_info if file_info is not None else parse_file_info(source_path)
 
@@ -246,11 +254,7 @@ async def commit_organized_media_file(
 
 
 async def _resolve_local(url: str, store: ResourceStore, client: WebClient) -> Path | None:
-    """内部 `/api/resources/{hash}` 查 store 已存文件; 外部 URL 经 store.acquire (命中缓存直出)."""
-    if url.startswith(RESOURCE_URL_PREFIX):
-        url_hash = url.rsplit("/", 1)[-1]
-        found = await store.get_by_url_hash(url_hash)
-        return found[1] if found else None
+    """内部 `/api/resources/{hash}` 与外部 URL 均由 store 解析 (命中缓存直出)."""
     return await store.acquire(url, client)
 
 
@@ -383,7 +387,7 @@ def _classify_indexed(path: Path, scan: LibraryScan) -> LibraryFileKind | None:
 class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
     """依据已有 Metadata 整理范围内的 MediaFile; 不刮削, 不修改 Metadata, 不扫描磁盘.
 
-    同库执行期与 TRASH 共用一把锁.
+    同库执行期与 DELETE 共用一把锁.
     """
 
     def __init__(
@@ -418,21 +422,22 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
     async def handle(self, payload: OrganizePayload) -> TaskResult[OrganizeResult]:
         library = await self._repo.get_library(payload.library_id)
         if library is None:
-            return TaskResult(success=False, error=f"Library {payload.library_id} not found")
+            return TaskResult(success=False, error=f"媒体库 {payload.library_id} 不存在")
         assert library.id is not None
         library_root = Path(library.path)
         if not await path_is_dir(library_root):
-            return TaskResult(success=False, error=f"Not a directory: {library.path}")
+            return TaskResult(success=False, error=f"不是目录: {library.path}")
         if payload.media_file_ids is None:
             scope = Path(payload.path) if payload.path else library_root
             if nfc_path(str(scope)) != nfc_path(library.path) and not await path_is_dir(scope):
-                return TaskResult(success=False, error=f"Not a directory: {scope}")
+                return TaskResult(success=False, error=f"不是目录: {scope}")
 
         lock = await self._library_locks.get(library.id)
         async with lock:
             return await self._handle_unlocked(payload, library)
 
     async def _handle_unlocked(self, payload: OrganizePayload, library: Library) -> TaskResult[OrganizeResult]:
+        assert library.id is not None
         indexed = await self._load_scope(payload, library)
         library_root = Path(library.path)
         media_extensions = frozenset(self._config.watcher.media_extensions) or MEDIA_EXTENSIONS
@@ -459,7 +464,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                         await self._repo.delete_media_file(mf.id)
                     else:
                         kind = await _classify_indexed(mf_path, scan)
-                        if kind is LibraryFileKind.TRASH or kind is LibraryFileKind.SKIP:
+                        if kind is LibraryFileKind.UNWANTED or kind is LibraryFileKind.SKIP:
                             skipped += 1
                         else:
                             # MEDIA, 以及 classify 返回 None 的已索引行 (不在当前扩展名白名单,
@@ -479,6 +484,9 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
         )
         move_to_fail_dir = library.move_to_fail_dir if payload.move_to_fail_dir is None else payload.move_to_fail_dir
         total = len(live)
+        # 只有移动方式会移走源文件, 复制 / 硬链接 / 符号链接不腾空目录.
+        prune_candidates: set[Path] = set()
+        collect_prune = payload.prune_empty_dirs and library.move_mode is MoveMode.MOVE
         if total == 0:
             await self.report_progress(1, 1, "done")
         else:
@@ -540,13 +548,19 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                     await commit_organized_media_file(self._repo, media_file, fop_result.dest, library_root)
                 if fop_result.success:
                     organized += 1
+                    if collect_prune:
+                        prune_candidates.update(ancestor_dirs(file_path, library_root=library_root))
                 else:
                     logger.warning("organize failed", path=path_str, error=fop_result.error)
                     failed += 1
                 await self.report_progress(i, total, file_path.name)
             await self.report_progress(total, total, "done")
 
-        # 全库扫描: 递归无视频的目录整夹入回收站 (排除库根 / 回收站 / 失败目录).
+        pruned_dirs = 0
+        if prune_candidates:
+            pruned_dirs = (await prune_empty_dirs(prune_candidates, library_root=library_root)).removed
+
+        # 全库扫描: 递归无视频的目录整夹入回收目录 (排除库根 / 回收目录 / 失败目录).
         if trash_empty_source:
             leftovers_trashed = await _trash_empty_source_dirs(
                 library_root,
@@ -560,6 +574,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
             organized=organized,
             skipped=skipped,
             failed=failed,
+            pruned_dirs=pruned_dirs,
             leftovers_trashed=leftovers_trashed,
             failed_moved=failed_moved,
         )
@@ -570,6 +585,7 @@ class OrganizeHandler(TaskHandler[OrganizePayload, OrganizeResult]):
                 organized=organized,
                 skipped=skipped,
                 failed=failed,
+                pruned_dirs=pruned_dirs,
                 leftovers_trashed=leftovers_trashed,
                 failed_moved=failed_moved,
             ),
@@ -644,7 +660,7 @@ async def _move_source_dir_to_fail(
 
 @in_thread
 def _iter_empty_source_dirs(library_root: Path, fail_dir_name: str) -> list[Path]:
-    """库内候选目录: 不含库根 / 回收站 / 失败目录树. 深层在前."""
+    """库内候选目录: 不含库根 / 回收目录 / 失败目录树. 深层在前."""
     dirs: list[Path] = []
     root_key = nfc_path(str(library_root))
     for path in library_root.rglob("*"):
@@ -667,7 +683,7 @@ async def _trash_empty_source_dirs(
     *,
     fail_dir_name: str = "",
 ) -> int:
-    """全库扫描: 递归无视频则整目录移入 `.amane_trash`. 不碰库根 / 回收站 / 失败目录."""
+    """全库扫描: 递归无视频则整目录移入 `.amane_trash`. 不碰库根 / 回收目录 / 失败目录."""
     trash_dir = library_root / TRASH_DIRNAME
     candidates = await _iter_empty_source_dirs(library_root, fail_dir_name)
     trashed = 0
@@ -692,9 +708,9 @@ async def _trash_empty_source_dirs(
 def _add_resource_ref(url: str, live_urls: set[str], live_hashes: set[str]) -> None:
     if not url:
         return
-    prefix = f"{RESOURCE_URL_PREFIX}/"
-    if url.startswith(prefix):
-        live_hashes.add(url[len(prefix) :].split("?", 1)[0])
+    url_hash = internal_url_hash(url)
+    if url_hash is not None:
+        live_hashes.add(url_hash)
     else:
         live_urls.add(url)
 

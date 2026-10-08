@@ -1,10 +1,8 @@
 """curl_cffi TLS 指纹模拟 + 限速 + 重试; 爬虫 / 图片 / Emby 等对外 HTTP 统一经此模块."""
 
 import asyncio
-import os
 import random
 import time
-from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 import aiofiles
@@ -15,10 +13,10 @@ from curl_cffi import CurlError
 from curl_cffi.requests import AsyncSession, BrowserTypeLiteral, Response
 
 from .errors import FailureKind, RequestError, RequestFailure
-from .recording import get_bound_http_recorder, reset_skip_http_body, set_skip_http_body
+from .recording import get_bound_http_recorder, skip_body_recording
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Mapping
     from pathlib import Path
 
     from curl_cffi.requests.session import HttpMethod
@@ -26,16 +24,6 @@ if TYPE_CHECKING:
     from ..config import SiteConfig
 
 logger = structlog.get_logger()
-
-
-@contextmanager
-def _skip_body_recording() -> Iterator[None]:
-    """get_bytes / download 跳过 body 落盘 (仅记 meta)."""
-    token = set_skip_http_body(True)
-    try:
-        yield
-    finally:
-        reset_skip_http_body(token)
 
 
 _IMPERSONATE_OPTIONS: tuple[BrowserTypeLiteral, ...] = (
@@ -156,7 +144,7 @@ class WebClient:
         *,
         proxy: str | None = None,
         timeout: float = 30.0,
-        max_retries: int = 3,
+        max_retries: int = 2,
         max_clients: int = 50,
         limiters: RateLimiters,
         same_origin_referer_hosts: frozenset[str] = frozenset(),
@@ -174,6 +162,10 @@ class WebClient:
             impersonate=random.choice(_IMPERSONATE_OPTIONS),
         )
 
+    async def acquire(self, url: str) -> None:
+        """按 host 取得限速许可. 供不经 ``request`` 的通道 (浏览器渲染 / solver) 复用同一限速."""
+        await self._limiters.get(httpx.URL(url).host).acquire()
+
     async def request(
         self,
         method: HttpMethod,
@@ -187,9 +179,14 @@ class WebClient:
         timeout: float | None = None,
         allow_redirects: bool = True,
         ok_statuses: frozenset[int] | None = None,
+        max_attempts: int | None = None,
         impersonate: BrowserTypeLiteral | None = None,
     ) -> Response:
         """``ok_statuses`` 额外视为成功 (例如 RSS 304), 不重试、不当失败. 重试用尽后抛 ``RequestError``.
+
+        ``max_retries`` 是首次请求之外的**重试次数** (``2`` → 最多发 3 次请求); ``max_attempts`` 是
+        **总尝试次数** 上限, 供一次性的探测向下覆盖 (探测传 1 表示只发一次). 两者都至少发一次请求,
+        配置 0 表示不重试而不是一次都不发.
 
         ``impersonate`` 覆盖本请求的 TLS / 浏览器指纹; ``None`` 时沿用会话构造时的默认值.
         """
@@ -197,10 +194,12 @@ class WebClient:
         headers = _with_same_origin_referer(host, headers, self._same_origin_referer_hosts)
         await self._limiters.get(host).acquire()
 
+        total_attempts = 1 + self._max_retries
+        attempts = max(1, total_attempts if max_attempts is None else min(max_attempts, total_attempts))
         t0 = time.monotonic()
         failure: RequestFailure | None = None
         last_resp: Response | None = None
-        for attempt in range(self._max_retries):
+        for attempt in range(attempts):
             should_retry = False
             try:
                 req_kwargs: dict[str, Any] = {
@@ -249,14 +248,14 @@ class WebClient:
             if not should_retry:
                 break
 
-            if attempt < self._max_retries - 1:
+            if attempt < attempts - 1:
                 wait = attempt * 3 + 2 + random.uniform(-1, 1)
                 logger.warning(
                     "request retry",
                     method=method,
                     url=url,
                     attempt=attempt + 1,
-                    max_retries=self._max_retries,
+                    max_retries=attempts,
                     error=failure.message,
                     retry_in=wait,
                 )
@@ -268,11 +267,11 @@ class WebClient:
             method=method,
             url=url,
             error=failure.message if failure else None,
-            attempts=self._max_retries,
+            attempts=attempts,
             duration_s=round(time.monotonic() - t0, 2),
         )
         self._record_exchange(
-            method, url, resp=last_resp, error=failure.message if failure else None, t0=t0, attempts=self._max_retries
+            method, url, resp=last_resp, error=failure.message if failure else None, t0=t0, attempts=attempts
         )
         raise RequestError(url, failure)
 
@@ -350,7 +349,7 @@ class WebClient:
         cookies: dict[str, str] | None = None,
         use_proxy: bool = True,
     ) -> bytes:
-        with _skip_body_recording():
+        with skip_body_recording():
             resp = await self.request("GET", url, headers=headers, cookies=cookies, use_proxy=use_proxy)
         return resp.content
 
@@ -509,62 +508,3 @@ class WebClient:
             await self._session.close()
         except Exception as e:
             logger.debug("session close error (ignored)", error=str(e))
-
-
-class BrowserClient:
-    """延迟初始化: 浏览器仅在首次使用时启动."""
-
-    def __init__(self, *, headless: bool = True, default_timeout: float = 30000):
-        self._headless = headless
-        self._default_timeout = default_timeout
-        self._playwright = None
-        self._browser = None
-        self._lock = asyncio.Lock()
-
-    async def _ensure_browser(self):
-        if self._browser is not None:
-            return
-        async with self._lock:
-            if self._browser is not None:
-                return
-            from patchright.async_api import async_playwright
-
-            self._playwright = await async_playwright().start()
-            self._browser = await self._playwright.chromium.launch(
-                channel="chrome",
-                headless=self._headless if os.getenv("AMANE_SHOW_BROWSER") is None else False,
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-
-    async def get_page(
-        self,
-        url: str,
-        *,
-        wait_for: str | None = None,
-        timeout: float | None = None,
-    ) -> tuple[str | None, str]:
-        """成功返回 ``(html, "")``, 失败返回 ``(None, 错误信息)``."""
-        effective_timeout = timeout if timeout is not None else self._default_timeout
-        try:
-            await self._ensure_browser()
-            assert self._browser is not None  # _ensure_browser 已保证
-            page = await self._browser.new_page()
-            try:
-                await page.goto(url, timeout=effective_timeout, wait_until="domcontentloaded")
-                if wait_for:
-                    await page.wait_for_selector(wait_for, timeout=effective_timeout)
-                content = await page.content()
-                return content, ""
-            finally:
-                await page.close()
-        except Exception as e:
-            logger.error("browser page fetch failed", url=url, error=str(e))
-            return None, str(e)
-
-    async def close(self) -> None:
-        if self._browser is not None:
-            await self._browser.close()
-            self._browser = None
-        if self._playwright is not None:
-            await self._playwright.stop()
-            self._playwright = None

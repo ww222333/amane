@@ -43,16 +43,17 @@
 - 影片元数据插件可选声明 `supports_connectivity_test` 并实现 `FilmSourceProvider.test`.
 - `POST /api/plugins/{id}/test` 用当前 (可覆盖) 配置临时构造 provider 做连通 / Cookie 检查, 不入队、不写配置.
 - 仅声明支持的插件在配置页显示测试按钮; 内置站点不走此接口.
+- 与上游「网络检测」(`POST /api/network/check` / `check_connectivity`) 并存: 网络检测覆盖全部配置来源; 本接口面向单插件试配置.
 
 见 [plugins.md](plugins.md).
 
 ## 插件可选 TLS 指纹
 
 - `WebClient.request` 接受可选 `impersonate` (curl_cffi 浏览器类型), 覆盖本请求指纹; 省略则用会话默认.
-- 供第三方源在带 Cloudflare Cookie 时对齐浏览器形态; 出口 IP 仍须与拿 Cookie 的客户端一致.
+- 与上游浏览器池 / Solver (`network.browser`) 并存: 指纹覆盖仍供插件按请求对齐 Cookie 浏览器; 桌面端浏览器引擎边界见上游文档.
 
 见 [plugins.md](plugins.md).
 
 ## 版本线
 
-本仓库 CHANGELOG 在上游 `0.16.x` 条目之上, 另以 `v1.0.x` 记录上述独有能力的发版说明.
+本仓库 CHANGELOG 在上游发版条目之上另以 `v1.0.x` 记录独有能力. 已并入上游至 **0.18.0** (含网络检测、字段锁定、查询预设、AG-UI、浏览器/Solver、并发抓取等), 同时保留本节所列 fork 能力.

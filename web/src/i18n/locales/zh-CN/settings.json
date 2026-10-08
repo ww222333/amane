@@ -17,14 +17,14 @@
   },
   "client": {
     "title": "客户端设置",
-    "unavailable": "此页面只在 Android 壳内可用。",
-    "bridgeMissing": "壳没有响应页面请求，请重新安装或更新 APP。",
+    "unavailable": "此页面只在 Android APP 内可用",
+    "bridgeMissing": "APP 未响应页面请求, 请重新安装或更新",
     "server": "当前服务器",
     "switchServer": "切换服务器",
     "webView": "系统 WebView",
-    "chromium": "渲染内核",
+    "chromium": "Chromium 版本",
     "webViewUnknown": "未知",
-    "chromiumOutdated": "渲染内核 Chromium {{major}} 低于前端需要的 {{min}}。请更新系统 WebView，否则布局与样式会残缺。",
+    "chromiumOutdated": "Chromium {{major}} 低于前端需要的 {{min}}. 请更新系统 WebView, 否则布局与样式会残缺",
     "updateWebView": "打开 WebView 的商店页",
     "appVersion": "APP 版本"
   },
@@ -49,16 +49,16 @@
         }
       },
       "crop_poster": {
-        "label": "裁剪海报",
-        "description": "从封面自动裁剪生成海报"
+        "label": "裁切海报",
+        "description": "从封面自动裁切生成海报"
       },
       "poster_crop_skip_ratio": {
-        "label": "海报裁剪跳过阈值比例",
-        "description": "已有海报与封面高度之比超过此值则不裁剪"
+        "label": "海报裁切跳过阈值比例",
+        "description": "已有海报与封面高度之比超过此值则不裁切"
       },
       "poster_ratio": {
-        "label": "海报裁剪比例",
-        "description": "从封面裁剪海报的宽高比"
+        "label": "海报裁切比例",
+        "description": "从封面裁切海报的宽高比"
       },
       "jpeg_quality": {
         "label": "JPEG 质量",
@@ -66,7 +66,7 @@
       },
       "field_priority": {
         "label": "字段优先级",
-        "description": "单独设定特定字段的优先级，类型路由中的其他站点仍会请求",
+        "description": "单独设定特定字段的优先级, 类型路由中的其他站点仍会请求",
         "options": {
           "title": "标题",
           "actors": "演员",
@@ -77,7 +77,7 @@
           "series": "系列",
           "studio": "制作商",
           "publisher": "发行商",
-          "plot": "简介",
+          "plot": "剧情",
           "poster_urls": "海报",
           "thumb_urls": "封面",
           "trailer_urls": "预告片",
@@ -87,6 +87,7 @@
         "$": {
           "options": {
             "airav": "airav",
+            "avbase": "avbase",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -116,6 +117,7 @@
           "$": {
             "options": {
               "airav": "airav",
+              "avbase": "avbase",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -146,7 +148,7 @@
         }
       },
       "field_blacklist": {
-        "label": "字段黑名单",
+        "label": "字段排除",
         "description": "指定字段不采用的站点",
         "options": {
           "title": "标题",
@@ -158,7 +160,7 @@
           "series": "系列",
           "studio": "制作商",
           "publisher": "发行商",
-          "plot": "简介",
+          "plot": "剧情",
           "poster_urls": "海报",
           "thumb_urls": "封面",
           "trailer_urls": "预告片",
@@ -168,6 +170,7 @@
         "$": {
           "options": {
             "airav": "airav",
+            "avbase": "avbase",
             "avsox": "avsox",
             "dahlia": "dahlia",
             "dmm": "dmm",
@@ -197,6 +200,7 @@
           "$": {
             "options": {
               "airav": "airav",
+              "avbase": "avbase",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -238,7 +242,7 @@
           "series": "系列",
           "studio": "制作商",
           "publisher": "发行商",
-          "plot": "简介",
+          "plot": "剧情",
           "poster_urls": "海报",
           "thumb_urls": "封面",
           "trailer_urls": "预告片",
@@ -259,6 +263,7 @@
         "description": "按站点单独设置",
         "options": {
           "airav": "airav",
+          "avbase": "avbase",
           "avsox": "avsox",
           "dahlia": "dahlia",
           "dmm": "dmm",
@@ -295,8 +300,22 @@
             "description": "通过配置的代理发送请求"
           },
           "use_browser": {
-            "label": "使用浏览器",
-            "description": "使用无头浏览器抓取(尚未实现)"
+            "label": "浏览器策略",
+            "options": {
+              "off": "关闭",
+              "auto": "自适应",
+              "always": "始终"
+            }
+          },
+          "browser_backend": {
+            "label": "浏览器后端",
+            "description": "覆盖全局后端; 关闭表示该来源禁用浏览器",
+            "options": {
+              "off": "关闭",
+              "patchright": "Patchright",
+              "camoufox": "Camoufox",
+              "solver": "Solver 服务"
+            }
           },
           "cookie": {
             "label": "Cookie",
@@ -304,11 +323,11 @@
           },
           "api_token": {
             "label": "API Token",
-            "description": ""
+            "description": "该站点专用的访问凭据"
           },
           "official_routes": {
-            "label": "厂商路由",
-            "description": "按番号前缀指定片商",
+            "label": "制作商路由",
+            "description": "按番号前缀指定制作商",
             "$": {
               "options": {
                 "attackers": "Attackers",
@@ -351,7 +370,7 @@
       },
       "content_routes": {
         "label": "类型路由",
-        "description": "按影片类型指定来源站点、默认优先级，以及自定义番号前缀",
+        "description": "按影片类型指定来源站点、默认优先级, 以及自定义番号前缀",
         "options": {
           "censored": "有码",
           "uncensored": "无码",
@@ -359,7 +378,7 @@
           "western": "欧美",
           "fc2": "FC2",
           "amateur": "素人",
-          "hentai": "里番",
+          "hentai": "动漫",
           "unknown": "未知"
         },
         "$": {
@@ -367,6 +386,7 @@
             "label": "",
             "options": {
               "airav": "airav",
+              "avbase": "avbase",
               "avsox": "avsox",
               "dahlia": "dahlia",
               "dmm": "dmm",
@@ -396,6 +416,7 @@
             "$": {
               "options": {
                 "airav": "airav",
+                "avbase": "avbase",
                 "avsox": "avsox",
                 "dahlia": "dahlia",
                 "dmm": "dmm",
@@ -426,7 +447,7 @@
           },
           "prefixes": {
             "label": "自定义前缀",
-            "description": "匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先"
+            "description": "匹配此前缀时优先使用本类型站点列表 (如 MIDV、ABC-); 长前缀优先"
           }
         }
       }
@@ -442,23 +463,39 @@
       },
       "max_retries": {
         "label": "最大重试次数",
-        "description": "请求失败时的最大重试次数"
+        "description": "请求失败时的重试次数上限, 不含首次请求; 0 表示只发一次"
       },
       "max_clients": {
         "label": "最大连接数",
         "description": "连接池最大连接数"
       },
-      "browser_timeout": {
-        "label": "浏览器超时",
-        "description": "无头浏览器页面导航超时 (毫秒)"
+      "browser": {
+        "label": "浏览器渲染",
+        "backend": {
+          "label": "浏览器后端",
+          "options": {
+            "off": "关闭",
+            "patchright": "Patchright",
+            "camoufox": "Camoufox",
+            "solver": "Solver 服务"
+          }
+        },
+        "timeout": {
+          "label": "页面请求超时",
+          "description": "浏览器超时(毫秒)"
+        },
+        "solver_url": {
+          "label": "Solver 地址",
+          "description": "FlareSolverr 兼容服务地址, 仅 solver 后端使用"
+        }
       },
       "chunked_threshold": {
         "label": "分块阈值",
-        "description": "超过该大小（字节）时分块下载"
+        "description": "超过该大小(字节)时分块下载"
       },
       "chunk_size": {
         "label": "分块大小",
-        "description": "每个分块的大小（字节）"
+        "description": "每个分块的大小(字节)"
       },
       "concurrency": {
         "label": "下载并发数",
@@ -490,7 +527,7 @@
     "watcher": {
       "use_polling": {
         "label": "轮询模式",
-        "description": "使用轮询代替 inotify (适用于网络文件系统)"
+        "description": "使用轮询代替系统事件 (适用于网络文件系统)"
       },
       "debounce_seconds": {
         "label": "防抖窗口",
@@ -559,7 +596,7 @@
       },
       "api_key": {
         "label": "API 密钥",
-        "description": ""
+        "description": "上游服务的密钥; 只保存在本机配置"
       },
       "api_type": {
         "label": "API 类型",
@@ -581,7 +618,7 @@
       },
       "translate_fields": {
         "label": "翻译字段",
-        "description": "当前仅支持标题/简介",
+        "description": "当前仅支持标题/剧情",
         "$": {
           "options": {
             "title": "标题",
@@ -593,7 +630,7 @@
             "series": "系列",
             "studio": "制作商",
             "publisher": "发行商",
-            "plot": "简介",
+            "plot": "剧情",
             "poster_urls": "海报",
             "thumb_urls": "封面",
             "trailer_urls": "预告片",
@@ -620,7 +657,7 @@
           "series": "系列",
           "studio": "制作商",
           "publisher": "发行商",
-          "plot": "简介",
+          "plot": "剧情",
           "poster_urls": "海报",
           "thumb_urls": "封面",
           "trailer_urls": "预告片",
@@ -669,20 +706,20 @@
         "description": "参考供应商说明, 过高可能触发限流"
       },
       "sql_timeout_ms": {
-        "label": "SQL 默认超时 (毫秒)",
+        "label": "查询默认超时 (毫秒)",
         "description": "无需批准即可执行的查询默认超时; 超时查询需用户批准后执行"
       },
       "result_cache_ttl_s": {
-        "label": "结果缓存 TTL (秒)",
-        "description": "交付结果内存缓存存活时间; 过期后重跑"
+        "label": "结果缓存时长 (秒)",
+        "description": "交付结果内存缓存存活时长; 过期后重跑"
       },
       "result_cache_max_entries": {
         "label": "结果缓存容量",
         "description": "内存结果缓存最大条目数 (LRU)"
       },
       "history_ttl_s": {
-        "label": "会话历史内存 TTL (秒)",
-        "description": "message_history 热缓存存活时间; 逐出后可从磁盘 messages.json 装回"
+        "label": "会话历史内存时长 (秒)",
+        "description": "会话历史的内存缓存存活时长; 逐出后按需从磁盘装回"
       },
       "history_max_sessions": {
         "label": "会话历史内存容量",
@@ -707,7 +744,7 @@
       },
       "read_timeout": {
         "label": "查询超时 (秒)",
-        "description": ""
+        "description": "单条查询的超时秒数"
       },
       "download_url": {
         "label": "数据包地址",
@@ -727,13 +764,13 @@
       },
       "corners": {
         "label": "水印位置",
-        "description": "同角多个按中字 → 无码 → 破解 → 流出 → 清晰度顺序叠加",
+        "description": "同角多个按中字 → 无码 → 破解 → 流出 → 分辨率顺序叠加",
         "options": {
           "subtitle": "中字",
           "uncensored": "无码",
           "cracked": "破解",
           "leaked": "流出",
-          "definition": "清晰度"
+          "definition": "分辨率"
         },
         "$": {
           "options": {
@@ -749,6 +786,7 @@
       "profile_sites": {
         "label": "演员资料优先级",
         "options": {
+          "avbase": "avbase",
           "javdb": "javdb",
           "minnano": "minnano",
           "theporndb": "theporndb",
@@ -756,6 +794,7 @@
         },
         "$": {
           "options": {
+            "avbase": "avbase",
             "javdb": "javdb",
             "minnano": "minnano",
             "theporndb": "theporndb",

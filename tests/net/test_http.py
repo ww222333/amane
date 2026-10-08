@@ -1,5 +1,6 @@
-"""HTTP 限速器缓存 / 覆盖; RequestError 状态分类; 同源 Referer 注入."""
+"""HTTP 限速器缓存 / 覆盖; RequestError 状态分类; 同源 Referer 注入; 重试次数."""
 
+import asyncio
 from typing import Any, ClassVar
 
 import pytest
@@ -54,12 +55,12 @@ _JAVBUS = frozenset({"www.javbus.com"})
 
 
 class _StubResponse:
-    status_code = 200
     headers: ClassVar[dict[str, str]] = {}
 
-    def __init__(self, *, url: str = "", content: bytes = b"") -> None:
+    def __init__(self, *, url: str = "", content: bytes = b"", status: int = 200) -> None:
         self.url = url
         self.content = content
+        self.status_code = status
 
 
 class _StubSession:
@@ -111,14 +112,72 @@ class TestSameOriginReferer:
 
         assert session.calls[0]["headers"] == {"Referer": "https://www.javbus.com/"}
 
+
+class TestRequestAttempts:
+    """重试次数: 配置值是首次请求之外的重试次数; ``max_attempts`` 是总次数上限, 向下覆盖."""
+
     @pytest.mark.asyncio
-    async def test_request_forwards_impersonate(self, monkeypatch):
+    @pytest.mark.parametrize(
+        ("max_retries", "max_attempts", "status", "expected_calls", "raises"),
+        [
+            # 未覆盖: 按配置的重试次数 (首次请求之外), 因此最多 1 + 3 次.
+            (3, None, 200, 1, False),
+            (3, None, 503, 4, True),
+            (2, None, 503, 3, True),
+            # 配置 0 表示不重试, 不是一次都不发.
+            (0, None, 200, 1, False),
+            (0, None, 503, 1, True),
+            # 探测的单次尝试: 覆盖配置里的重试次数.
+            (3, 1, 503, 1, True),
+            (3, 2, 503, 2, True),
+        ],
+    )
+    async def test_attempts(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        max_retries: int,
+        max_attempts: int | None,
+        status: int,
+        expected_calls: int,
+        raises: bool,
+    ):
+        async def _no_sleep(_seconds: float) -> None:
+            return None
+
+        client = WebClient(max_retries=max_retries, limiters=RateLimiters(default_rate=100))
+        session = _StubSession(_StubResponse(status=status))
+        monkeypatch.setattr(client, "_session", session)
+        # 重试之间的等待与结论无关, 缩短测试墙钟.
+        monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+
+        if raises:
+            with pytest.raises(RequestError):
+                await client.request("GET", "https://example.com/x", max_attempts=max_attempts)
+        else:
+            await client.request("GET", "https://example.com/x", max_attempts=max_attempts)
+
+        assert len(session.calls) == expected_calls
+
+
+class TestRequestImpersonate:
+    """按请求覆盖 TLS 指纹; 省略则不向 session 传入 impersonate (沿用会话默认)."""
+
+    @pytest.mark.asyncio
+    async def test_omitted_impersonate_not_in_kwargs(self, monkeypatch: pytest.MonkeyPatch):
         client = WebClient(limiters=RateLimiters(default_rate=100))
         session = _StubSession()
         monkeypatch.setattr(client, "_session", session)
 
-        await client.request("GET", "https://example.com/", impersonate="chrome131")
-        assert session.calls[0]["impersonate"] == "chrome131"
+        await client.request("GET", "https://example.com/x")
 
-        await client.request("GET", "https://example.com/")
-        assert "impersonate" not in session.calls[1]
+        assert "impersonate" not in session.calls[0]
+
+    @pytest.mark.asyncio
+    async def test_explicit_impersonate_forwarded(self, monkeypatch: pytest.MonkeyPatch):
+        client = WebClient(limiters=RateLimiters(default_rate=100))
+        session = _StubSession()
+        monkeypatch.setattr(client, "_session", session)
+
+        await client.request("GET", "https://example.com/x", impersonate="chrome124")
+
+        assert session.calls[0]["impersonate"] == "chrome124"

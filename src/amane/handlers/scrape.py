@@ -1,17 +1,17 @@
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Sequence
 from typing import TYPE_CHECKING, Protocol
 
 from structlog.contextvars import bind_contextvars
 
 from ..aggregate import SCALAR_FIELDS, AggregatedMetadata, CrawlerLike, FieldLanguage, aggregate, compile_priority
-from ..crawlers.base import Crawler
 from ..crawlers.models import SearchQuery
-from ..crawlers.site_roles import MULTI_LANGUAGE_SOURCE_IDS
+from ..crawlers.site_roles import builtin_descriptors
 from ..db.models import TaskType
 from ..enums import ActorGender, MetadataField
 from ..media import materialize_images
 from ..observability import current
 from ..parsing import match_content_type_prefix
+from ..plugins.models import SourceDescriptor, SourceTrait
 from ._common import ensure_oshash, finalize_media_file
 from .models import ActorScrapePayload, CacheKind, ScrapePayload, ScrapeResult
 from .protocol import FollowupTask, TaskHandler, TaskResult
@@ -25,11 +25,6 @@ if TYPE_CHECKING:
 
 # 进度: 聚合按已满足标量字段计数; 其后固定两步 (物化图片 / 持久化).
 _PROGRESS_POST_STEPS = 2
-
-
-def _crawlers_need_oshash(crawlers: Mapping[str, CrawlerLike]) -> bool:
-    """只依据本次实例化的爬虫是否声明需要文件指纹 (Stash 系)."""
-    return any(isinstance(crawler, Crawler) and type(crawler).profile().uses_file_hash for crawler in crawlers.values())
 
 
 class CrawlerFactoryLike(Protocol):
@@ -47,7 +42,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         pipeline_config: HotSettings,
         web_client: WebClient | None = None,
         translator: Translator | None = None,
-        multi_language_sources: frozenset[str] | None = None,
+        source_catalog: Sequence[SourceDescriptor] | None = None,
     ):
         super().__init__(payload_t=ScrapePayload, result_t=ScrapeResult)
         self._repo = repo
@@ -56,7 +51,11 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         self._web_client = web_client
         self._resource_store = resource_store
         self._translator = translator
-        self._multi_language_sources = multi_language_sources or MULTI_LANGUAGE_SOURCE_IDS
+        # 调度事实只从来源目录读取: 内置来源的 descriptor 由 profile() 合成, 插件来源由插件声明.
+        catalog = source_catalog if source_catalog is not None else builtin_descriptors()
+        self._multi_language_sources = frozenset(d.id for d in catalog if SourceTrait.MULTI_LANGUAGE in d.traits)
+        self._partial_sources = frozenset(d.id for d in catalog if SourceTrait.NEEDS_PARTIAL in d.traits)
+        self._file_hash_sources = frozenset(d.id for d in catalog if SourceTrait.USES_FILE_HASH in d.traits)
 
     async def handle(self, payload: ScrapePayload) -> TaskResult[ScrapeResult]:
         bind_contextvars(number=payload.number)
@@ -79,22 +78,22 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
         route = self._config.scraping.route_sites(content_type)
         if not route:
             rec.warning("no eligible crawlers for content type", content_type=content_type)
-            return TaskResult(success=False, error=f"No eligible crawlers for content type {content_type}")
+            return TaskResult(success=False, error=f"内容类型 {content_type} 没有可用来源")
         rec.info("scraping started", content_type=str(content_type), crawlers=route)
         rec.update_summary(eligible_sites=[str(s) for s in route])
 
         crawlers = await self._factory.get_crawlers(route)
         if not crawlers:
             current().warning("no crawlers available", requested=route)
-            return TaskResult(success=False, error=f"No crawlers available for {payload.number}")
+            return TaskResult(success=False, error=f"番号 {payload.number} 没有可用来源")
 
         file = None
         if payload.media_file_id:
             file = await self._repo.get_media_file(media_id=payload.media_file_id)
 
-        # 仅当本次爬虫声明需要指纹时计算 oshash.
+        # 仅当本次可用来源声明需要指纹时计算 oshash.
         file_hash = file.oshash if file else None
-        if file is not None and file_hash is None and _crawlers_need_oshash(crawlers):
+        if file is not None and file_hash is None and any(name in self._file_hash_sources for name in crawlers):
             file_hash = await ensure_oshash(self._repo, file)
 
         q = SearchQuery(
@@ -115,7 +114,7 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             # aggregate 上报的 current 是已满足标量字段数; 分母由 handler 统一为含后续步骤的 total.
             await self.report_progress(current, progress_total, message)
 
-        # 出站: 按波次执行抓取图 (execute_graph); 按 use_cache 复用 raw 快照.
+        # 出站: 执行获取图 (execute_graph), 声明依赖的来源在第二段; 按 use_cache 复用 raw 快照.
         result = await aggregate(
             q,
             crawlers,
@@ -124,16 +123,18 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             db_data.raw if db_data else None,
             on_progress=_on_fetch_progress,
             multi_lang_sites=self._multi_language_sources,
+            deferred_sites=frozenset(name for name in crawlers if name in self._partial_sources),
         )
 
         # 站点结果已由引擎 _fetch_one 逐条上报到 summary.outcomes; 这里只记录调度顺序.
         rec.update_summary(sites_queried=list(result.sites_queried))
 
-        if not result.field_sources:
+        # 标量可以全空: 只要有来源返回结果, 海报 / 评分 / external_id 仍可入库.
+        if not result.raw:
             current().warning("no data found from any source", failed_sites=result.failed_sites)
-            return TaskResult(success=False, error=f"No metadata found for {payload.number}")
+            return TaskResult(success=False, error=f"未找到 {payload.number} 的元数据")
 
-        # 抓取结束: 进度分子对齐标量字段数, 其后为物化与持久化.
+        # 获取结束: 进度分子对齐标量字段数, 其后为物化与持久化.
         await self.report_progress(len(SCALAR_FIELDS), progress_total, "fetch")
 
         # 翻译文本字段; 失败不阻断刮削.
@@ -267,8 +268,8 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             return None
         try:
             result = await self._translator.translate(value, target, field, use_cache=use_cache)
-        except Exception:
-            current().warning("translation failed, keeping original", field=str(field))
+        except Exception as e:
+            current().warning("translation failed, keeping original", field=str(field), error=str(e))
             return None
         if result:
             current().debug("field translated", field=str(field), target=str(target))

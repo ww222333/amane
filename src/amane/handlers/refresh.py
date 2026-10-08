@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING
 import structlog
 
 from ..db import TaskType
-from ..library import MEDIA_EXTENSIONS, LibraryFileKind, LibraryScan, fail_dir_for_scan
+from ..library import MEDIA_EXTENSIONS, InventoryStore, LibraryScan, OrphanScan, fail_dir_for_scan, scan_inventory
 from ..parsing import parse_file_info
 from ..utils.path import nfc_path
 from ..utils.threads import path_exists, path_is_dir
-from ._common import register_media_file, scan_library
+from ._common import register_media_file
 from .models import RefreshPayload, RefreshResult, ScanMode, ScrapePayload
 from .protocol import FollowupTask, TaskHandler, TaskResult
 
@@ -22,15 +22,23 @@ _WALK_LOG_EVERY = 500
 
 
 class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
-    def __init__(self, repo: Repository, media_extensions: Sequence[str] | None = None):
+    """扫描增删 MediaFile; 整库范围时顺带把清理清单写入清单存放."""
+
+    def __init__(
+        self,
+        repo: Repository,
+        media_extensions: Sequence[str] | None = None,
+        inventory_store: InventoryStore | None = None,
+    ):
         super().__init__(payload_t=RefreshPayload, result_t=RefreshResult)
         self._repo = repo
         self._media_extensions = frozenset(media_extensions) if media_extensions else MEDIA_EXTENSIONS
+        self._inventory_store = inventory_store
 
     async def handle(self, payload: RefreshPayload) -> TaskResult[RefreshResult]:
         scan_dir = Path(payload.path)
         if not await path_is_dir(scan_dir):
-            return TaskResult(success=False, error=f"Not a directory: {payload.path}")
+            return TaskResult(success=False, error=f"不是目录: {payload.path}")
 
         library = await self._repo.get_library(payload.library_id)
         scan = LibraryScan(
@@ -62,12 +70,33 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
             if want_add:
                 logger.info("scan walking started", path=payload.path)
                 walked = 0
-                hits = await scan_library(
-                    scan_dir, recursive=payload.recursive if payload.recursive is not None else True, scan=scan
+                library_root = Path(library.path) if library is not None else scan_dir
+                # 与清理清单共用一趟遍历: 媒体命中用于增删, 无效文件与空目录顺手进清单.
+                inventory = await scan_inventory(
+                    scan_dir,
+                    library_id=payload.library_id,
+                    library_root=library_root,
+                    recursive=payload.recursive if payload.recursive is not None else True,
+                    patterns=payload.patterns or [],
+                    scan=scan,
+                    collect_media=True,
+                    orphan_scan=(
+                        OrphanScan.from_library(
+                            library_root=library_root,
+                            scope_dir=scan_dir,
+                            subtitle_extensions=library.subtitle_extensions,
+                            trailer_pattern=library.trailer_pattern,
+                            patterns=payload.patterns or [],
+                            media_extensions=self._media_extensions,
+                        )
+                        if library is not None
+                        else None
+                    ),
                 )
-                for hit in hits:
-                    if hit.kind is not LibraryFileKind.MEDIA:
-                        continue
+                if library is not None and self._inventory_store is not None and inventory.scope_path is None:
+                    # 子目录范围的巡检不代表整库, 因此不覆盖面板用的清单.
+                    self._inventory_store.put(inventory)
+                for hit in inventory.media_hits:
                     file_path = hit.path
                     path_key = nfc_path(str(file_path))
                     walked += 1

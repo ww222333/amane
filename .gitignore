@@ -209,3 +209,7 @@ androidapp/*.keystore
 
 # parley discussion workspaces created by tooling — never track
 .parley/
+
+# merge conflict side-by-side dumps
+_merge_compare/
+

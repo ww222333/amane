@@ -2,19 +2,46 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
-from sqlalchemy.exc import IntegrityError
+from sqlmodel import col, select
 
 from amane.db.actor_lookup import build_actor_lookup_names
-from amane.db.models import Actor, FacetKind, FacetRuleAction, FacetSortField, Metadata, MetadataActor, SortOrder
+from amane.db.models import (
+    Actor,
+    ActorUserTag,
+    FacetKind,
+    FacetRuleAction,
+    FacetSortField,
+    Metadata,
+    MetadataActor,
+    SortOrder,
+    UserTag,
+)
+from amane.db.repo_types import ActorBrowseParams
 from amane.enums import ActorGender
 
 if TYPE_CHECKING:
+    from amane.db.repo_types import UserTagLinkAction
     from amane.db.repository import Repository
 
 pytestmark = pytest.mark.asyncio
+
+
+async def _tag(repo: Repository, name: str) -> UserTag:
+    """测试便捷入口: 按名称取回或新建单个用户标签."""
+    tags, _created = await repo.ensure_user_tags([name])
+    return tags[0]
+
+
+async def _tag_ids(repo: Repository, *names: str) -> list[int]:
+    """按名称取回或新建标签并返回 id (测试里反复要非空 id)."""
+    tags, _created = await repo.ensure_user_tags(list(names))
+    ids = [tag.id for tag in tags]
+    assert all(tag_id is not None for tag_id in ids)
+    return [tag_id for tag_id in ids if tag_id is not None]
 
 
 class TestFacetSync:
@@ -97,9 +124,9 @@ class TestFacetSync:
     async def test_scrape_upsert_preserves_user_tags_and_comments(self, repo: Repository) -> None:
         meta = await repo.upsert_metadata(number="ABC-004", actors=["Alice"], tags=["old"])
         assert meta.id is not None
-        tag = await repo.create_user_tag("watched")
+        tag = await _tag(repo, "watched")
         assert tag.id is not None
-        await repo.attach_user_tag(meta.id, tag.id)
+        await repo.apply_metadata_user_tags([meta.id], [tag.id], action="attach")
         await repo.create_comment(meta.id, "hello")
 
         await repo.upsert_metadata(number="ABC-004", actors=["Bob"], tags=["new"])
@@ -130,23 +157,45 @@ class TestUserTagsAndComments:
     async def test_user_tag_crud_and_attach(self, repo: Repository) -> None:
         meta = await repo.upsert_metadata(number="UT-001")
         assert meta.id is not None
-        tag = await repo.create_user_tag("fav")
+        tag = await _tag(repo, "fav")
         assert tag.id is not None
-        assert await repo.attach_user_tag(meta.id, tag.id) is True
-        assert await repo.attach_user_tag(meta.id, tag.id) is True  # 幂等
+
+        first = await repo.apply_metadata_user_tags([meta.id], [tag.id], action="attach")
+        assert first == (1, 0, 0)
+        # 已挂载是幂等命中, 计入 unchanged, 不是错误
+        again = await repo.apply_metadata_user_tags([meta.id], [tag.id], action="attach")
+        assert again == (0, 1, 0)
+
         _, n = await repo.list_metadata(user_tag_ids=[tag.id])
         assert n == 1
-        assert await repo.detach_user_tag(meta.id, tag.id) is True
-        assert await repo.detach_user_tag(meta.id, tag.id) is False
+
         await repo.update_user_tag(tag.id, name="favorite")
         updated = await repo.get_user_tag(tag.id)
         assert updated is not None and updated.name == "favorite"
         assert await repo.delete_user_tag(tag.id) is True
 
-    async def test_duplicate_user_tag_name_raises(self, repo: Repository) -> None:
-        await repo.create_user_tag("dup")
-        with pytest.raises(IntegrityError):
-            await repo.create_user_tag("dup")
+    async def test_ensure_user_tags_reuses_existing(self, repo: Repository) -> None:
+        """名称已存在时复用原行, 不新建也不报错; 返回与入参同序."""
+        first, created = await repo.ensure_user_tags(["dup", "other"])
+        assert created == 2
+        again, created_again = await repo.ensure_user_tags(["other", "dup", "other"])
+        assert created_again == 0
+        assert [tag.id for tag in again] == [first[1].id, first[0].id]
+        assert len(await repo.list_user_tags()) == 2
+
+    async def test_ensure_user_tags_reuses_row_committed_by_concurrent_writer(self, repo: Repository) -> None:
+        """他人先读到「不存在」、随后提交同名行时, 调用方复用该行而不是撞唯一索引."""
+        async with repo._session() as other:
+            other.add(UserTag(name="same"))
+            await other.flush()  # 尚未提交: 并发调用方的 SELECT 看不到这一行
+            task = asyncio.create_task(repo.ensure_user_tags(["same"]))
+            await asyncio.sleep(0.1)  # 让调用方走完 SELECT 并卡在 INSERT 的写锁上
+            await other.commit()
+            tags, created = await task
+
+        assert created == 0
+        assert [tag.name for tag in tags] == ["same"]
+        assert len(await repo.list_user_tags()) == 1
 
     async def test_comment_crud(self, repo: Repository) -> None:
         meta = await repo.upsert_metadata(number="CM-001")
@@ -165,28 +214,47 @@ class TestUserTagsAndComments:
         assert await repo.delete_comment(c.id) is True
         assert await repo.create_comment(99999, "x") is None
 
-    async def test_attach_missing_returns_false(self, repo: Repository) -> None:
-        assert await repo.attach_user_tag(1, 1) is False
-
-    async def test_batch_attach_detach_user_tag(self, repo: Repository) -> None:
-        tag = await repo.create_user_tag("watched")
+    async def test_apply_unknown_tag_raises(self, repo: Repository) -> None:
+        """未知标签 id 是请求级错误: 整请求不生效, 错误信息点名标签 id."""
+        meta = await repo.upsert_metadata(number="UT-UNKNOWN")
+        assert meta.id is not None
+        tag = await _tag(repo, "known")
         assert tag.id is not None
-        m1 = await repo.upsert_metadata(number="BT-001")
-        m2 = await repo.upsert_metadata(number="BT-002")
+        with pytest.raises(ValueError, match="用户标签不存在"):
+            await repo.apply_metadata_user_tags([meta.id], [tag.id, 9999], action="attach")
+        assert await repo.list_metadata_user_tags(meta.id) == []
+
+    @pytest.mark.parametrize(
+        ("ids", "action", "expected"),
+        [
+            ([9999], "attach", (0, 0, 1)),
+            ([9999], "detach", (0, 0, 1)),
+            ([], "attach", (0, 0, 0)),
+        ],
+    )
+    async def test_apply_user_tags_missing_targets(
+        self, repo: Repository, ids: list[int], action: UserTagLinkAction, expected: tuple[int, int, int]
+    ) -> None:
+        tag = await _tag(repo, "edge")
+        assert tag.id is not None
+        assert await repo.apply_metadata_user_tags(ids, [tag.id], action=action) == expected
+
+    async def test_apply_many_tags_many_metadata(self, repo: Repository) -> None:
+        """一行挂多个标签, 多行同挂: 计数以条目为单位."""
+        t1 = await _tag(repo, "multi-1")
+        t2 = await _tag(repo, "multi-2")
+        assert t1.id is not None and t2.id is not None
+        m1 = await repo.upsert_metadata(number="UT-MULTI-1")
+        m2 = await repo.upsert_metadata(number="UT-MULTI-2")
         assert m1.id is not None and m2.id is not None
 
-        affected, missing = await repo.batch_attach_user_tag([m1.id, m2.id, 9999], tag.id)
-        assert (affected, missing) == (2, 1)
-        again, _ = await repo.batch_attach_user_tag([m1.id], tag.id)
-        assert again == 1
-        none, all_miss = await repo.batch_attach_user_tag([m1.id], 9999)
-        assert (none, all_miss) == (0, 1)
-
-        det_ok, det_miss = await repo.batch_detach_user_tag([m1.id, m2.id], tag.id)
-        assert (det_ok, det_miss) == (2, 0)
-        # m2 已卸下, 再卸一次计入 missing
-        _, again_miss = await repo.batch_detach_user_tag([m2.id], tag.id)
-        assert again_miss == 1
+        assert await repo.apply_metadata_user_tags([m1.id, m2.id, 9999], [t1.id, t2.id], action="attach") == (2, 0, 1)
+        assert [t.name for t in await repo.list_metadata_user_tags(m1.id)] == ["multi-1", "multi-2"]
+        # 两行均已挂 t1, 因此都计入 unchanged
+        assert await repo.apply_metadata_user_tags([m1.id, m2.id], [t1.id], action="attach") == (0, 2, 0)
+        await repo.apply_metadata_user_tags([m1.id], [t1.id], action="detach")
+        assert await repo.apply_metadata_user_tags([m1.id, m2.id], [t1.id], action="detach") == (1, 1, 0)
+        assert [t.name for t in await repo.list_metadata_user_tags(m1.id)] == ["multi-2"]
 
 
 class TestFacetFilterCombine:
@@ -514,51 +582,50 @@ class TestFacetRenameMergeDelete:
         assert await repo.delete_facet(FacetKind.ACTOR, 9999) is False
 
     async def test_user_tag_rename_merge_delete(self, repo: Repository) -> None:
-        tag = await repo.create_user_tag("old")
+        tag = await _tag(repo, "old")
         assert tag.id is not None
         renamed = await repo.rename_facet(FacetKind.USER_TAG, tag.id, "new")
         assert renamed is not None and renamed.name == "new"
-        await repo.create_user_tag("taken")
-        mine = await repo.create_user_tag("mine")
+        await _tag(repo, "taken")
+        mine = await _tag(repo, "mine")
         assert mine.id is not None
         with pytest.raises(ValueError):
             await repo.rename_facet(FacetKind.USER_TAG, mine.id, "taken")
         assert await repo.rename_facet(FacetKind.USER_TAG, 9999, "x") is None
 
-        target = await repo.create_user_tag("target")
-        source = await repo.create_user_tag("source")
+        target = await _tag(repo, "target")
+        source = await _tag(repo, "source")
         assert target.id is not None and source.id is not None
         meta_a = await repo.upsert_metadata(number="MGU-1a")
         meta_b = await repo.upsert_metadata(number="MGU-1b")
         assert meta_a.id is not None and meta_b.id is not None
-        await repo.attach_user_tag(meta_a.id, target.id)
-        await repo.attach_user_tag(meta_b.id, source.id)
+        await repo.apply_metadata_user_tags([meta_a.id], [target.id], action="attach")
+        await repo.apply_metadata_user_tags([meta_b.id], [source.id], action="attach")
         merged = await repo.merge_facets(FacetKind.USER_TAG, target.id, [source.id])
         assert merged is not None and merged.name == "target" and merged.count == 2
         tags_b = await repo.list_metadata_user_tags(meta_b.id)
         assert any(t.name == "target" for t in tags_b)
         assert await repo.get_facet(FacetKind.USER_TAG, source.id) is None
 
-        t2 = await repo.create_user_tag("t")
-        s2 = await repo.create_user_tag("s")
+        t2 = await _tag(repo, "t")
+        s2 = await _tag(repo, "s")
         assert t2.id is not None and s2.id is not None
         meta = await repo.upsert_metadata(number="MGU-2")
         assert meta.id is not None
-        await repo.attach_user_tag(meta.id, t2.id)
-        await repo.attach_user_tag(meta.id, s2.id)
+        await repo.apply_metadata_user_tags([meta.id], [t2.id, s2.id], action="attach")
         dup = await repo.merge_facets(FacetKind.USER_TAG, t2.id, [s2.id])
         assert dup is not None and dup.count == 1
         assert [t.name for t in await repo.list_metadata_user_tags(meta.id)] == ["t"]
 
-        only = await repo.create_user_tag("only")
+        only = await _tag(repo, "only")
         assert only.id is not None
         with pytest.raises(ValueError):
             await repo.merge_facets(FacetKind.USER_TAG, only.id, [9999])
-        orphan = await repo.create_user_tag("orphan-source")
+        orphan = await _tag(repo, "orphan-source")
         assert orphan.id is not None
         assert await repo.merge_facets(FacetKind.USER_TAG, 9999, [orphan.id]) is None
 
-        doomed = await repo.create_user_tag("doomed")
+        doomed = await _tag(repo, "doomed")
         assert doomed.id is not None
         assert await repo.delete_facet(FacetKind.USER_TAG, doomed.id) is True
         with pytest.raises(ValueError):
@@ -626,3 +693,83 @@ class TestFacetRenameMergeDelete:
         assert await repo.get_actor_aliases(target_id) == ["OtherName", "Roma"]
         rules = await repo.list_facet_rules(FacetKind.ACTOR)
         assert not any(r.action == FacetRuleAction.ALIAS for r in rules)
+
+
+class TestActorUserTags:
+    async def test_apply_list_and_filter(self, repo: Repository) -> None:
+        await repo.upsert_metadata(number="AUT-001", actors=["Alice", "Bob", "Carol"])
+        alice = await _facet_id(repo, FacetKind.ACTOR, "Alice")
+        bob = await _facet_id(repo, FacetKind.ACTOR, "Bob")
+        carol = await _facet_id(repo, FacetKind.ACTOR, "Carol")
+        fav_id, later_id = await _tag_ids(repo, "收藏", "稍后看")
+
+        assert await repo.apply_actor_user_tags([alice, bob, 9999], [fav_id, later_id], action="attach") == (2, 0, 1)
+        assert [t.name for t in await repo.list_actor_user_tags(alice)] == ["收藏", "稍后看"]
+        # 挂载后即成为演员列表的筛选条件, 多值为 AND
+        items, total = await repo.browse_actors(ActorBrowseParams(user_tag_ids=[fav_id]))
+        assert total == 2 and {i.name for i in items} == {"Alice", "Bob"}
+        items, total = await repo.browse_actors(ActorBrowseParams(user_tag_ids=[fav_id, later_id]))
+        assert total == 2
+        await repo.apply_actor_user_tags([bob], [later_id], action="detach")
+        items, total = await repo.browse_actors(ActorBrowseParams(user_tag_ids=[fav_id, later_id]))
+        assert total == 1 and items[0].name == "Alice"
+        assert await repo.list_actor_user_tags(carol) == []
+
+    async def test_apply_unknown_tag_raises(self, repo: Repository) -> None:
+        await repo.upsert_metadata(number="AUT-002", actors=["Alice"])
+        alice = await _facet_id(repo, FacetKind.ACTOR, "Alice")
+        (tag_id,) = await _tag_ids(repo, "收藏")
+        with pytest.raises(ValueError, match="用户标签不存在"):
+            await repo.apply_actor_user_tags([alice], [tag_id, 9999], action="attach")
+        assert await repo.list_actor_user_tags(alice) == []
+
+    async def test_delete_user_tag_clears_actor_links(self, repo: Repository) -> None:
+        await repo.upsert_metadata(number="AUT-003", actors=["Alice"])
+        alice = await _facet_id(repo, FacetKind.ACTOR, "Alice")
+        (tag_id,) = await _tag_ids(repo, "收藏")
+        await repo.apply_actor_user_tags([alice], [tag_id], action="attach")
+        assert await repo.delete_user_tag(tag_id) is True
+        assert await repo.list_actor_user_tags(alice) == []
+
+    async def test_delete_actor_clears_links(self, repo: Repository) -> None:
+        await repo.upsert_metadata(number="AUT-004", actors=["Alice"])
+        alice = await _facet_id(repo, FacetKind.ACTOR, "Alice")
+        (tag_id,) = await _tag_ids(repo, "收藏")
+        await repo.apply_actor_user_tags([alice], [tag_id], action="attach")
+        assert await repo.delete_facet(FacetKind.ACTOR, alice) is True
+        async with repo._session() as session:
+            remaining = (await session.exec(select(ActorUserTag).where(col(ActorUserTag.actor_id) == alice))).all()
+            assert list(remaining) == []
+
+    async def test_merge_user_tags_carries_actor_links(self, repo: Repository) -> None:
+        await repo.upsert_metadata(number="AUT-005", actors=["Alice", "Bob"])
+        alice = await _facet_id(repo, FacetKind.ACTOR, "Alice")
+        bob = await _facet_id(repo, FacetKind.ACTOR, "Bob")
+        target_id, source_id = await _tag_ids(repo, "target", "source")
+        await repo.apply_actor_user_tags([alice], [target_id], action="attach")
+        await repo.apply_actor_user_tags([bob], [source_id], action="attach")
+
+        merged = await repo.merge_facets(FacetKind.USER_TAG, target_id, [source_id])
+        assert merged is not None
+        # 源标签的挂载迁入 target; 两个演员各有一条
+        assert [t.name for t in await repo.list_actor_user_tags(bob)] == ["target"]
+
+        # 同一个演员同时挂着两个待合并的标签时只保留一条
+        t2_id, s2_id = await _tag_ids(repo, "t", "s")
+        await repo.apply_actor_user_tags([alice], [t2_id, s2_id], action="attach")
+        await repo.merge_facets(FacetKind.USER_TAG, t2_id, [s2_id])
+        assert [t.name for t in await repo.list_actor_user_tags(alice)] == ["t", "target"]
+
+    async def test_merge_actors_carries_user_tag_links(self, repo: Repository) -> None:
+        await repo.upsert_metadata(number="AUT-006", actors=["Canonical", "Other"])
+        target_id = await _facet_id(repo, FacetKind.ACTOR, "Canonical")
+        source_id = await _facet_id(repo, FacetKind.ACTOR, "Other")
+        shared_id, extra_id = await _tag_ids(repo, "shared", "extra")
+        await repo.apply_actor_user_tags([target_id], [shared_id], action="attach")
+        await repo.apply_actor_user_tags([source_id], [shared_id, extra_id], action="attach")
+
+        assert await repo.merge_facets(FacetKind.ACTOR, target_id, [source_id]) is not None
+        assert [t.name for t in await repo.list_actor_user_tags(target_id)] == ["extra", "shared"]
+        async with repo._session() as session:
+            orphans = (await session.exec(select(ActorUserTag).where(col(ActorUserTag.actor_id) == source_id))).all()
+            assert list(orphans) == []

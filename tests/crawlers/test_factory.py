@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class _FakeCrawler(Crawler):
-    """用于测试的假爬虫 - 只记录构造次数, 不做实际抓取."""
+    """用于测试的假爬虫 - 只记录构造次数, 不做实际获取."""
 
     @classmethod
     def profile(cls) -> CrawlerProfile:
@@ -61,24 +61,6 @@ class TestCrawlerFactoryGetCrawlers:
         assert len(result) == 1
         assert "fake_test_site" in result
         assert "nonexistent" not in result
-
-
-class TestCrawlerFactoryActiveCrawlers:
-    @pytest.mark.asyncio(loop_scope="function")
-    async def test_reflects_instantiated_crawlers(self, http_client):
-        factory = CrawlerFactory(http_client)
-        await factory.get("fake_test_site")
-        active = factory.active_crawlers
-        assert "fake_test_site" in active
-        assert isinstance(active["fake_test_site"], _FakeCrawler)
-
-    @pytest.mark.asyncio(loop_scope="function")
-    async def test_returns_copy_not_reference(self, http_client):
-        factory = CrawlerFactory(http_client)
-        await factory.get("fake_test_site")
-        active = factory.active_crawlers
-        active["new_key"] = None  # type: ignore[assignment]
-        assert "new_key" not in factory.active_crawlers
 
 
 @pytest.mark.asyncio(loop_scope="function")

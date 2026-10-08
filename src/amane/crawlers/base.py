@@ -6,12 +6,15 @@ from typing import TYPE_CHECKING
 import structlog
 
 from ..enums import ActorGender
-from ..plugins.models import SourceCapability
+from ..net.connectivity import ConnectivityOutcome
+from ..plugins.models import SourceCapability, SourceDescriptor, SourceTrait
 from .http import HttpClient
 
 if TYPE_CHECKING:
+    from ..aggregate.engine import CrawlerLike
     from ..config import SiteConfig
     from ..enums import SiteName
+    from .connectivity import ConnectivityProbe
     from .models import FetchOptions, MediaMetadata, SearchQuery
 
 
@@ -32,14 +35,24 @@ class CrawlerProfile:
     same_origin_referer: bool = False
     # 空则影片爬虫视为 film_metadata; 演员爬虫必须显式声明 profile / image.
     capabilities: frozenset[SourceCapability] = field(default_factory=frozenset)
-    # True 时聚合展开 (site, lang) 节点.
-    multi_language: bool = False
+    # 行为开关: 引擎读到某个取值就改变调度或调用方式 (排段 / 多语言 / 文件指纹), 取值见 ``SourceTrait``.
+    # 与 capabilities (来源提供什么) 分开.
+    traits: frozenset[SourceTrait] = field(default_factory=frozenset)
     genders: frozenset[ActorGender] | None = None
-    # True 时刮削前按需计算 oshash. 默认不在扫描期算.
-    uses_file_hash: bool = False
 
     def effective_capabilities(self) -> frozenset[SourceCapability]:
         return self.capabilities or frozenset({SourceCapability.FILM_METADATA})
+
+    def to_descriptor(self) -> SourceDescriptor:
+        """引擎与配置读取的声明性事实都在这里产出, 新增 profile 字段时同步此处."""
+        return SourceDescriptor(
+            id=str(self.name),
+            name=str(self.name),
+            version="builtin",
+            capabilities=frozenset(self.effective_capabilities()),
+            urls=(*self.urls, self.base_url),
+            traits=frozenset(str(trait) for trait in self.traits),
+        )
 
 
 class Crawler(ABC):
@@ -100,8 +113,21 @@ class Crawler(ABC):
             self.logger.info("scrape ok", number=number, title=result.title, duration_s=elapsed)
         return result
 
+    async def check_connectivity(self) -> ConnectivityOutcome:
+        """连通性自检: 缺省 GET ``base_url``, 用与刮削相同的视图 (渲染来源经浏览器, 其余直接请求).
+
+        实际入口与 ``base_url`` 不同的来源覆盖本方法 (探测真实 API 主机, 或按前置条件报 ``skipped``).
+        """
+        return await self.client.check(self.base_url, cookies=self.cookies, headers=self.headers)
+
     @abstractmethod
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None: ...
 
     @abstractmethod
     async def _scrape(self, url: str, options: FetchOptions | None = None) -> MediaMetadata | None: ...
+
+
+if TYPE_CHECKING:
+    # 结构性协议没有运行期检查: 在此静态断言实例满足聚合引擎与连通性编排声明的协议.
+    _crawler_like: type[CrawlerLike] = Crawler
+    _connectivity_probe: type[ConnectivityProbe] = Crawler

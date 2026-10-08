@@ -20,9 +20,9 @@
     "selectPath": "选择路径",
     "submit": "提交",
     "scrapeNormal": "刮削",
-    "scrapeNormalDesc": "不重新抓取已缓存数据",
+    "scrapeNormalDesc": "不重新获取已缓存数据",
     "scrapeForce": "强制刮削",
-    "scrapeForceDesc": "重新抓取全部来源(覆盖缓存)",
+    "scrapeForceDesc": "重新获取全部来源(覆盖缓存)",
     "moveUp": "上移",
     "moveDown": "下移"
   },
@@ -43,18 +43,26 @@
     "settings": "设置",
     "client": "客户端设置",
     "logs": "日志",
+    "networkCheck": "网络检测",
     "meta": "片库",
     "actors": "演员",
     "catalog": "分类",
     "libraries": "媒体库",
     "feeds": "订阅",
     "feedSources": "订阅源",
+    "savedQueries": "查询预设",
     "agent": "Amane",
     "groups": {
       "browse": "浏览",
       "manage": "管理",
       "ops": "运行"
     }
+  },
+  "defaults": {
+    "set": "设为默认",
+    "clear": "清除默认",
+    "saved": "已设为默认",
+    "cleared": "已清除默认"
   },
   "theme": {
     "light": "浅色",
@@ -70,9 +78,8 @@
     "oneValuePerLine": "每行一项"
   },
   "pagination": {
-    "next": "下一页",
     "totalItems": "(共 {{count}} 条)",
-    "range": "第 {{start}}–{{end}} 条，共 {{total}} 条",
+    "range": "第 {{start}}–{{end}} 条, 共 {{total}} 条",
     "pageSizeShort": "{{size}}/页",
     "loadedOfTotal": "已加载 {{loaded}} / {{total}}",
     "pageOf": "第 {{page}} / {{total}} 页"
@@ -97,8 +104,8 @@
   "toast": {
     "scrapeStarted": "刮削任务已加入队列",
     "scanStarted": "扫描已开始",
-    "metadataUpdated": "元数据已更新",
-    "metadataDeleted": "元数据已删除",
+    "metadataUpdated": "影片已更新",
+    "metadataDeleted": "影片已删除",
     "configSaved": "配置已保存",
     "watchPathAdded": "监控路径已添加",
     "watchPathRemoved": "监控路径已移除",
@@ -117,10 +124,12 @@
     "taskCreated": "任务已创建",
     "organizeStarted": "整理任务已提交",
     "userTagCreated": "用户标签已创建",
+    "userTagExists": "用户标签已存在",
     "userTagAttached": "已添加用户标签",
+    "userTagBatchUpdated": "已更新 {{count}} 条影片",
     "userTagDetached": "已移除用户标签",
     "userTagDeleted": "用户标签已删除",
-    "facetDeleted": "分类已删除并加入黑名单",
+    "facetDeleted": "分类已删除并加入剔除名单",
     "facetRuleDeleted": "规则已移除",
     "commentCreated": "评论已发表",
     "commentUpdated": "评论已保存",
@@ -145,10 +154,16 @@
   },
   "auth": {
     "title": "需要登录",
-    "description": "桌面端可点击菜单栏/任务栏图标 - 复制 API Token, 容器端可在数据目录的 token 文件中查看",
-    "tokenPlaceholder": "粘贴令牌",
+    "description": "桌面端可点击菜单栏/托盘图标 - 复制 API Token, 容器端可在数据目录的 token 文件中查看",
+    "tokenPlaceholder": "粘贴 Token",
     "serverSettings": "服务器设置",
-    "invalidToken": "令牌无效，请检查后重试。",
-    "connectionFailed": "无法连接服务器，请确认服务已启动。"
+    "invalidToken": "Token 无效, 请检查后重试",
+    "connectionFailed": "无法连接服务器, 请确认服务已启动"
+  },
+  "errorBoundary": {
+    "title": "页面发生错误",
+    "description": "渲染此页面时抛出了未捕获的异常, 详情见下方",
+    "retry": "重试",
+    "switchServer": "切换服务器"
   }
 }

@@ -1,16 +1,19 @@
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator
 
 from ...db import Metadata
-from ...enums import ActorGender
+from ...enums import ActorGender, MetadataField
 from ...handlers import CacheKind
 from ...parsing import ContentType, Mosaic
 from ...utils.model import anyof_extras, create_partial_model, kv
 from .comments import CommentResponse
+from .crop import CropBoxRequest
 from .media import MediaFileResponse
 from .user_tags import UserTagResponse
+
+_METADATA_FIELD_VALUES = frozenset(str(field) for field in MetadataField)
 
 
 class FilePhaseSummary(BaseModel):
@@ -49,6 +52,16 @@ class MetadataResponse(BaseModel):
     source_urls: dict = {}
     field_sources: dict = {}
     raw: dict = {}
+    locked_fields: list[MetadataField] = []
+
+    @field_validator("locked_fields", mode="before")
+    @classmethod
+    def _drop_unknown_locks(cls, value: object) -> object:
+        """非法存量锁值忽略."""
+        if not isinstance(value, list):
+            return []
+        return list(dict.fromkeys(item for item in value if isinstance(item, str) and item in _METADATA_FIELD_VALUES))
+
     file_count: int = 0
     file_phase: FilePhaseSummary = Field(default_factory=FilePhaseSummary)
     created_at: datetime | None = None
@@ -58,10 +71,10 @@ class MetadataResponse(BaseModel):
 if TYPE_CHECKING:
     type PartialMetadata = Metadata
 
-# 外部可写字段: 排除只读列 (id/number/时间戳) 与仅后端可写字段 (raw/field_sources 由刮削写入, 前端只读展示).
+# 外部可写字段: 排除只读列 (id/number/时间戳), 仅后端可写字段 (raw/field_sources 由刮削写入) 与锁列 (经 PUT locks 管理).
 PartialMetadata = create_partial_model(
     Metadata,
-    ignore_fields=("id", "number", "created_at", "updated_at", "raw", "field_sources"),
+    ignore_fields=("id", "number", "created_at", "updated_at", "raw", "field_sources", "locked_fields"),
     json_schema_extras={
         "extrafanart_urls": anyof_extras(kv({"v-x-long": True})),
         "release": anyof_extras(
@@ -97,19 +110,14 @@ class MergeRequest(BaseModel):
     selections: dict[str, str] = Field(description="field_name -> source_key 映射")
 
 
-class CropPosterRequest(BaseModel):
+class MetadataLocksRequest(BaseModel):
+    """整体替换锁定字段集合."""
+
+    fields: list[MetadataField] = Field(default_factory=list, description="锁定的字段集合; 空集解除全部锁定")
+
+
+class CropPosterRequest(CropBoxRequest):
     """从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸)."""
-
-    left: int = Field(ge=0, description="裁切框左边界 (含)")
-    top: int = Field(ge=0, description="裁切框上边界 (含)")
-    right: int = Field(gt=0, description="裁切框右边界 (不含)")
-    bottom: int = Field(gt=0, description="裁切框下边界 (不含)")
-
-    @model_validator(mode="after")
-    def _box_positive_area(self) -> CropPosterRequest:
-        if self.left >= self.right or self.top >= self.bottom:
-            raise ValueError("裁切区域须为正矩形 (left < right, top < bottom)")
-        return self
 
 
 class MetadataBatchIdsRequest(BaseModel):
@@ -138,12 +146,7 @@ class MetadataBatchScrapeResponse(BaseModel):
     task_ids: list[int] = Field(description="提交的任务 id 列表")
 
 
-class MetadataBatchUserTagsRequest(BaseModel):
+class MetadataUserTagsRequest(BaseModel):
     ids: list[int] = Field(min_length=1, description="Metadata ID 列表")
-    user_tag_id: int
-    action: Literal["attach", "detach"]
-
-
-class MetadataBatchUserTagsResponse(BaseModel):
-    affected: int = Field(description="成功挂载/取消挂载的数量")
-    missing: int = Field(description="不存在的 metadata id (或用户 tag 不存在时的全部 id) 数量")
+    user_tag_ids: list[int] = Field(min_length=1, description="用户标签 ID 列表")
+    action: Literal["attach", "detach"] = Field(description="attach 为并入, detach 为移除; 两者均幂等")

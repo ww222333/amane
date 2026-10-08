@@ -244,7 +244,7 @@ class WatcherService:
         min_file_size: int = 0,
         fail_dir: str = "",
     ) -> None:
-        """运行时热添加 native 监控库. clouddrive 库走 sync_library."""
+        """运行时热添加 native 监控库. clouddrive 库经 ``sync_library``."""
         self._cloud_routes.pop(library_id, None)
         if self._watcher is None:
             self._watcher = self._new_watcher()

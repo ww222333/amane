@@ -6,10 +6,18 @@ from typing import TYPE_CHECKING
 
 import pytest
 
+from amane.db.models import UserTag
+
 if TYPE_CHECKING:
     from httpx2 import AsyncClient
 
     from amane.db.repository import Repository
+
+
+async def _tag(repo: Repository, name: str) -> UserTag:
+    """测试便捷入口: 按名称取回或新建单个用户标签."""
+    tags, _created = await repo.ensure_user_tags([name])
+    return tags[0]
 
 
 @pytest.mark.asyncio(loop_scope="function")
@@ -71,14 +79,14 @@ async def test_facet_http_actor_rename_merge_delete(client: AsyncClient, repo: R
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_facet_http_user_tag_and_validation(client: AsyncClient, repo: Repository) -> None:
-    tag = await repo.create_user_tag("old")
+    tag = await _tag(repo, "old")
     assert tag.id is not None
     renamed = await client.patch(f"facets/user_tag/{tag.id}", json={"name": "new"})
     assert renamed.status_code == 200
     assert renamed.json()["name"] == "new"
 
-    await repo.create_user_tag("taken")
-    mine = await repo.create_user_tag("mine")
+    await _tag(repo, "taken")
+    mine = await _tag(repo, "mine")
     assert mine.id is not None
     assert (await client.patch(f"facets/user_tag/{mine.id}", json={"name": "taken"})).status_code == 409
     assert (await client.patch("facets/user_tag/9999", json={"name": "x"})).status_code == 404
@@ -86,12 +94,12 @@ async def test_facet_http_user_tag_and_validation(client: AsyncClient, repo: Rep
     assert (await client.patch(f"facets/user_tag/{mine.id}", json={"name": ""})).status_code == 422
     assert (await client.patch("facets/not_a_kind/1", json={"name": "x"})).status_code == 422
 
-    target = await repo.create_user_tag("target")
-    source = await repo.create_user_tag("source")
+    target = await _tag(repo, "target")
+    source = await _tag(repo, "source")
     assert target.id is not None and source.id is not None
     meta = await repo.upsert_metadata(number="HTTP-UT-1")
     assert meta.id is not None
-    await repo.attach_user_tag(meta.id, source.id)
+    await repo.apply_metadata_user_tags([meta.id], [source.id], action="attach")
     merged = await client.post("facets/user_tag/merge", json={"target_id": target.id, "source_ids": [source.id]})
     assert merged.status_code == 200
     assert merged.json()["name"] == "target"
@@ -100,7 +108,7 @@ async def test_facet_http_user_tag_and_validation(client: AsyncClient, repo: Rep
         await client.post("facets/user_tag/merge", json={"target_id": target.id, "source_ids": [9999]})
     ).status_code == 400
 
-    doomed = await repo.create_user_tag("doomed")
+    doomed = await _tag(repo, "doomed")
     assert doomed.id is not None
     assert (await client.delete(f"facets/user_tag/{doomed.id}")).status_code == 204
     assert (await client.get("facets/user_tag/rules")).status_code == 400
@@ -121,3 +129,23 @@ async def test_facet_http_scalar_rename(client: AsyncClient, repo: Repository) -
     for meta in (m1, m2):
         detail = await client.get(f"metadata/{meta.id}")
         assert detail.json()["metadata"]["studio"] == "New"
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_actor_merge_via_http_carries_user_tags(client: AsyncClient, repo: Repository) -> None:
+    """演员合并经 HTTP: 源演员的标签挂载并入 target, 不留悬挂行."""
+    await repo.upsert_metadata(number="HTTP-AM-1", actors=["Canonical"])
+    await repo.upsert_metadata(number="HTTP-AM-2", actors=["Other"])
+    listed = (await client.get("facets/actor")).json()["items"]
+    target = next(i["id"] for i in listed if i["name"] == "Canonical")
+    source = next(i["id"] for i in listed if i["name"] == "Other")
+    created = await client.post("facets/user_tag", json={"names": ["收藏", "稍后看"]})
+    tag_id, later_id = [tag["id"] for tag in created.json()["items"]]
+    await repo.apply_actor_user_tags([target, source], [tag_id, later_id], action="attach")
+    assert (await client.delete(f"facets/user_tag/{later_id}")).status_code == 204
+
+    merged = await client.post("facets/actor/merge", json={"target_id": target, "source_ids": [source]})
+    assert merged.status_code == 200
+    tags = (await client.get(f"actors/{target}")).json()["user_tags"]
+    assert [t["name"] for t in tags] == ["收藏"]
+    assert (await client.get(f"actors/{source}")).status_code == 404

@@ -2,19 +2,21 @@ from typing import Annotated
 
 import structlog
 from fastapi import APIRouter, HTTPException, Query, Response
-from sqlalchemy.exc import IntegrityError
 
 from ...db.models import SCRAPE_FACET_KINDS, FacetKind, FacetSortField, SortOrder
 from ...db.repo_types import FacetItem
+from ...utils.model import to_resp
 from ..deps import RepoDep
 from ..models import (
-    FacetCreateRequest,
     FacetListResponse,
     FacetMergeRequest,
     FacetRenameRequest,
     FacetResponse,
     FacetRuleListResponse,
     FacetRuleResponse,
+    UserTagResponse,
+    UserTagsCreateRequest,
+    UserTagsCreateResponse,
 )
 
 logger = structlog.get_logger()
@@ -26,17 +28,12 @@ def _facet_response(item: FacetItem) -> FacetResponse:
     return FacetResponse(id=item.id, name=item.name, count=item.count)
 
 
-@router.post("/user_tag", status_code=201)
-async def create_user_tag(req: FacetCreateRequest, repo: RepoDep) -> FacetResponse:
-    name = req.name.strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="名称不能为空")
-    try:
-        tag = await repo.create_user_tag(name)
-    except IntegrityError as e:
-        raise HTTPException(status_code=409, detail="用户标签名称已存在") from e
-    assert tag.id is not None
-    return FacetResponse(id=tag.id, name=tag.name, count=0)
+@router.post("/user_tag")
+async def create_user_tags(req: UserTagsCreateRequest, repo: RepoDep) -> UserTagsCreateResponse:
+    """按名称取回或新建用户标签; 已存在的名称直接复用, 响应与入参同序."""
+    tags, created = await repo.ensure_user_tags(req.names)
+    logger.info("user tags ensured", requested=len(req.names), created=created)
+    return UserTagsCreateResponse(items=[to_resp(UserTagResponse, tag) for tag in tags], created=created)
 
 
 @router.get("/{kind}")
@@ -87,7 +84,7 @@ async def delete_facet_rule(kind: FacetKind, rule_id: int, repo: RepoDep) -> Res
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     if not ok:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise HTTPException(status_code=404, detail="规则不存在")
     logger.info("facet rule deleted", kind=kind, rule_id=rule_id)
     return Response(status_code=204)
 
@@ -96,7 +93,7 @@ async def delete_facet_rule(kind: FacetKind, rule_id: int, repo: RepoDep) -> Res
 async def get_facet(kind: FacetKind, facet_id: int, repo: RepoDep) -> FacetResponse:
     item = await repo.get_facet(kind, facet_id)
     if item is None:
-        raise HTTPException(status_code=404, detail="Facet not found")
+        raise HTTPException(status_code=404, detail="分类不存在")
     return _facet_response(item)
 
 
@@ -108,7 +105,7 @@ async def merge_facets(kind: FacetKind, req: FacetMergeRequest, repo: RepoDep) -
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     if item is None:
-        raise HTTPException(status_code=404, detail="Facet not found")
+        raise HTTPException(status_code=404, detail="分类不存在")
     logger.info("facets merged", kind=kind, target_id=req.target_id, source_ids=req.source_ids)
     return _facet_response(item)
 
@@ -124,19 +121,19 @@ async def rename_facet(kind: FacetKind, facet_id: int, req: FacetRenameRequest, 
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e)) from e
     if item is None:
-        raise HTTPException(status_code=404, detail="Facet not found")
+        raise HTTPException(status_code=404, detail="分类不存在")
     logger.info("facet renamed", kind=kind, facet_id=facet_id, name=name)
     return _facet_response(item)
 
 
 @router.delete("/{kind}/{facet_id}", status_code=204)
 async def delete_facet(kind: FacetKind, facet_id: int, repo: RepoDep) -> Response:
-    """删除分类. 爬取侧写入黑名单并从 Metadata 真值剔除; user_tag 硬删."""
+    """删除分类. 爬取侧写入剔除规则并从 Metadata 真值移除; user_tag 硬删."""
     try:
         ok = await repo.delete_facet(kind, facet_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     if not ok:
-        raise HTTPException(status_code=404, detail="Facet not found")
+        raise HTTPException(status_code=404, detail="分类不存在")
     logger.info("facet deleted", kind=kind, facet_id=facet_id)
     return Response(status_code=204)

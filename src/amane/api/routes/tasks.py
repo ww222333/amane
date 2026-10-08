@@ -27,9 +27,12 @@ logger = structlog.get_logger()
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
+# 标题取库名的任务类型: payload 带 `library_id` 的库内任务.
+_LIBRARY_TASK_TYPES = (TaskType.REFRESH, TaskType.ORGANIZE, TaskType.SCAN_INVALID, TaskType.DELETE)
+
 
 async def _task_titles(repo: RepoDep, tasks: Sequence[Task]) -> dict[int, str | None]:
-    """scrape→番号, actor_scrape→演员名, refresh/organize/trash→库名. 批量查库, 避免列表 N+1."""
+    """scrape→番号, actor_scrape→演员名, 库内任务→库名. 批量查库, 避免列表 N+1."""
     actor_ids = {
         int(p["actor_id"])
         for t in tasks
@@ -38,8 +41,7 @@ async def _task_titles(repo: RepoDep, tasks: Sequence[Task]) -> dict[int, str | 
     library_ids = {
         int(p["library_id"])
         for t in tasks
-        if t.type in (TaskType.REFRESH, TaskType.ORGANIZE, TaskType.TRASH)
-        and isinstance((p := t.payload or {}).get("library_id"), int)
+        if t.type in _LIBRARY_TASK_TYPES and isinstance((p := t.payload or {}).get("library_id"), int)
     }
     actor_names = await repo.get_actor_names(list(actor_ids))
     library_names = await repo.get_library_names(list(library_ids))
@@ -55,7 +57,7 @@ async def _task_titles(repo: RepoDep, tasks: Sequence[Task]) -> dict[int, str | 
         elif t.type == TaskType.ACTOR_SCRAPE:
             actor_id = payload.get("actor_id")
             title = actor_names.get(int(actor_id)) if isinstance(actor_id, int) else None
-        elif t.type in (TaskType.REFRESH, TaskType.ORGANIZE, TaskType.TRASH):
+        elif t.type in _LIBRARY_TASK_TYPES:
             library_id = payload.get("library_id")
             title = library_names.get(int(library_id)) if isinstance(library_id, int) else None
         out[t.id] = title
@@ -134,7 +136,7 @@ async def get_task_children(
 ) -> TaskChildListResponse:
     """直接后继 (TaskLink 出边). total 为出边总数, 不受本页截断."""
     if await repo.get_task(task_id) is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="任务不存在")
     pairs = await repo.list_children(task_id, limit=limit, offset=offset)
     decorated = await _decorate_tasks(repo, [task for task, _ in pairs])
     parent_counts = await repo.child_status_counts([task_id])
@@ -190,7 +192,7 @@ async def batch_tasks(
     result = await execute_task_batch(
         action=req.action,
         repo=repo,
-        worker=runtime.worker,
+        cancel_task=runtime.cancel_task,
         log_dir=config.cold.log_dir,
         task_ids=req.task_ids,
         statuses=req.status,
@@ -211,7 +213,7 @@ async def batch_tasks(
 async def get_task(task_id: int, repo: RepoDep) -> TaskResponse:
     task = await repo.get_task(task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="任务不存在")
     return await _to_resp(repo, task)
 
 
@@ -220,9 +222,9 @@ async def get_task_report(task_id: int, repo: RepoDep, config: ConfigDep) -> Tas
     """面向 UI 的投影, 非完整记录导出. 仅终态可用."""
     task = await repo.get_task(task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="任务不存在")
     if task.status not in (TaskStatus.DONE, TaskStatus.FAILED):
-        raise HTTPException(status_code=409, detail="Report is only available for finished tasks")
+        raise HTTPException(status_code=409, detail="只有已结束的任务才有摘要")
     return build_task_report(config.cold.log_dir, task)
 
 
@@ -238,14 +240,14 @@ async def get_task_record(
     """导出任务记录 (zip). 默认脱敏; include_secrets=true 需本地存在 .secrets.hot.json."""
     task = await repo.get_task(task_id)
     if task is None:
-        raise HTTPException(status_code=404, detail="Task not found")
+        raise HTTPException(status_code=404, detail="任务不存在")
     if task.status not in (TaskStatus.DONE, TaskStatus.FAILED):
-        raise HTTPException(status_code=409, detail="Record is only available for finished tasks")
+        raise HTTPException(status_code=409, detail="只有已结束的任务才能导出任务记录")
 
     try:
         data = build_record_zip(config.cold.log_dir, task_id, include_secrets=include_secrets)
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Record not found for this task") from None
+        raise HTTPException(status_code=404, detail="该任务没有任务记录") from None
     except PermissionError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
 

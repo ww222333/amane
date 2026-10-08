@@ -9,12 +9,13 @@ from ...db import Repository, TaskStatus, TaskType
 from ...handlers import (
     CacheKind,
     CleanupPayload,
+    DeletePayload,
     OrganizePayload,
     R18ImportPayload,
     RefreshPayload,
     RescrapePayload,
+    ScanInvalidPayload,
     ScrapePayload,
-    TrashPayload,
     UpscalePayload,
 )
 from ...parsing import ContentType, infer_content_type, parse_file_info
@@ -133,7 +134,7 @@ class ScrapeRequest(BaseModel):
         if self.media_id is not None:
             media = await repo.get_media_file(self.media_id)
             if media is None:
-                raise HTTPException(status_code=404, detail=f"Media file {self.media_id} not found")
+                raise HTTPException(status_code=404, detail=f"媒体文件 {self.media_id} 不存在")
             if self.number is not None:
                 return ScrapePayload(
                     number=self.number,
@@ -165,8 +166,12 @@ class OrganizeSubmission(OrganizePayload):
     type: Literal["organize"]
 
 
-class TrashSubmission(TrashPayload):
-    type: Literal["trash"]
+class ScanInvalidSubmission(ScanInvalidPayload):
+    type: Literal["scan_invalid"]
+
+
+class DeleteSubmission(DeletePayload):
+    type: Literal["delete"]
 
 
 class ScrapeSubmission(ScrapeRequest):
@@ -201,7 +206,8 @@ class ActorScrapeSubmission(BaseModel):
 TaskSubmission = Annotated[
     RefreshSubmission
     | OrganizeSubmission
-    | TrashSubmission
+    | ScanInvalidSubmission
+    | DeleteSubmission
     | ScrapeSubmission
     | CleanupSubmission
     | UpscaleSubmission

@@ -11,6 +11,8 @@ from typing import TYPE_CHECKING, override
 from parsel import Selector
 
 from ...enums import SiteName
+from ...net.connectivity import ConnectivityOutcome, probe_get
+from ...plugins.models import SourceTrait
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
 from ..parsing import extract_all_texts, extract_text
@@ -275,8 +277,22 @@ class OfficialCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
         return CrawlerProfile(
-            name=SiteName.OFFICIAL, base_url="", urls=[f"https://{d}" for d in MANUFACTURER_DOMAINS.values()]
+            name=SiteName.OFFICIAL,
+            base_url="",
+            urls=[f"https://{d}" for d in MANUFACTURER_DOMAINS.values()],
+            traits=frozenset({SourceTrait.NEEDS_PARTIAL}),
         )
+
+    @override
+    async def check_connectivity(self) -> ConnectivityOutcome:
+        """集群没有总入口, 取一个厂牌站作代表.
+
+        配了 ``official_routes`` 时取其中首个映射到的域: 用户可能只刮某几个集团, 探默认表首项会得出
+        与其流量无关的结论. 结论只代表该域的可达性; 不同集团用各自的 CMS, 一个站可达不代表其它站可达.
+        """
+        configured = next(iter(self.config.official_routes.values()), None) if self.config else None
+        domain = MANUFACTURER_DOMAINS[configured] if configured else next(iter(MANUFACTURER_DOMAINS.values()))
+        return await probe_get(self.client.web_client, f"https://{domain}", cookies=self.cookies, headers=self.headers)
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
         domain = self._resolve_domain(query, self.config)

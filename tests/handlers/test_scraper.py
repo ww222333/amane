@@ -1,20 +1,26 @@
 """测试 amane.pipeline - ScrapeHandler 和 RefreshHandler"""
 
+from __future__ import annotations
+
+from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 import pytest
 from pydantic import ValidationError
 
+from amane.aggregate import AggregatedMetadata
 from amane.config import HotSettings, ScrapingConfig
 from amane.crawlers.models import MediaMetadata
 from amane.db.models import MediaFileStatus, TaskType
 from amane.enums import MetadataField, SiteName
 from amane.handlers import RefreshHandler, RefreshPayload, ScanMode, ScrapeHandler, ScrapePayload
-from amane.library import LibraryFileKind, LibraryHit
+from amane.library import CleanupInventory, InventorySource, InventoryStore, LibraryFileKind, LibraryHit, scan_inventory
 from amane.parsing import ContentType
+from amane.plugins.models import SourceDescriptor
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from pathlib import Path
 
     from amane.db.repository import Repository
 
@@ -96,8 +102,30 @@ class TestScrapeHandler:
         assert metadata.title == "Mock Title"
 
     @pytest.mark.asyncio(loop_scope="function")
+    async def test_skips_locked_fields_end_to_end(self, repo: Repository, handler):
+        """自动刮削跳过锁定字段, 未锁定字段正常更新, 锁定字段的来源标注保留."""
+        seeded = await repo.upsert_metadata(
+            number="MIDV-123", title="Manual", tags=["keep"], field_sources={"title": "manual-src"}
+        )
+        assert seeded.id is not None
+        await repo.set_metadata_locks(seeded.id, [MetadataField.TITLE])
+
+        media = await repo.create_media_file(library_id=1, path="/media/MIDV-123.mp4")
+        result = await handler.handle(
+            ScrapePayload(media_file_id=media.id, number="MIDV-123", content_type=ContentType.CENSORED)
+        )
+
+        assert result.success is True
+        updated = await repo.get_metadata_by_number("MIDV-123")
+        assert updated is not None
+        assert updated.title == "Manual"
+        assert updated.tags == ["Drama"]
+        assert updated.field_sources["title"] == "manual-src"
+        assert updated.locked_fields == ["title"]
+
+    @pytest.mark.asyncio(loop_scope="function")
     async def test_reports_determinate_progress(self, repo: Repository, handler):
-        """ScrapeHandler 上报 determinate 进度: 字段抓取 → materialize → done."""
+        """ScrapeHandler 上报 determinate 进度: 字段获取 → materialize → done."""
         events: list[tuple[int, int, str]] = []
 
         async def capture(current: int, total: int, message: str = "") -> None:
@@ -118,7 +146,7 @@ class TestScrapeHandler:
         assert all(t == total for _, t, _ in events)
         assert [c for c, _, _ in events] == sorted(c for c, _, _ in events)
         assert any(m == "materialize" for _, _, m in events)
-        # 抓取结束抬到标量满分 (= total - 2, 留给 materialize/persist)
+        # 获取结束抬到标量满分 (= total - 2, 留给 materialize/persist)
         assert any(c == total - 2 and m == "fetch" for c, _, m in events)
 
     @pytest.mark.asyncio(loop_scope="function")
@@ -153,6 +181,136 @@ class TestScrapeHandler:
             ScrapePayload(media_file_id=media.id, number="TEST-001", content_type=ContentType.CENSORED)
         )
         assert result.success is False
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_empty_scalars_with_image_still_succeeds(self, repo: Repository, resource_store):
+        """标量全空但有海报 → 仍算抓到数据, 不整单失败."""
+
+        class PosterOnlyCrawler:
+            name = SiteName.JAVDB
+
+            def __init__(self, client=None):
+                self.client = client
+
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                return MediaMetadata(number=query.number, poster_urls=["http://p.jpg"])
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": PosterOnlyCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/POSTER-001.mp4")
+        result = await h.handle(
+            ScrapePayload(media_file_id=media.id, number="POSTER-001", content_type=ContentType.CENSORED)
+        )
+        assert result.success is True
+        assert result.result is not None
+        assert result.result.field_sources == {}
+        metadata = await repo.get_metadata_by_number("POSTER-001")
+        assert metadata is not None
+        assert metadata.poster_urls == ["http://p.jpg"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_locked_source_preserved_when_scalars_empty(self, repo: Repository, resource_store):
+        """标量全空的成功刮削也不冲掉锁定字段的来源标注."""
+        seeded = await repo.upsert_metadata(number="POSTER-001", title="Manual", field_sources={"title": "manual-src"})
+        assert seeded.id is not None
+        await repo.set_metadata_locks(seeded.id, [MetadataField.TITLE])
+
+        class PosterOnlyCrawler:
+            name = SiteName.JAVDB
+
+            def __init__(self, client=None):
+                self.client = client
+
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                return MediaMetadata(number=query.number, poster_urls=["http://p.jpg"])
+
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"javdb": PosterOnlyCrawler()}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/POSTER-001.mp4")
+        result = await h.handle(
+            ScrapePayload(media_file_id=media.id, number="POSTER-001", content_type=ContentType.CENSORED)
+        )
+
+        assert result.success is True
+        metadata = await repo.get_metadata_by_number("POSTER-001")
+        assert metadata is not None
+        assert metadata.title == "Manual"
+        assert metadata.field_sources == {"title": "manual-src"}
+        assert metadata.poster_urls == ["http://p.jpg"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_declared_source_receives_partial_result(self, repo: Repository, resource_store):
+        """第二段来源收到第一段已定值的标量, 第一段来源收到 None."""
+
+        class RecordingFetcher:
+            def __init__(self, metadata: MediaMetadata) -> None:
+                self._metadata = metadata
+                self.partials: list[AggregatedMetadata | None] = []
+
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                self.partials.append(query.partial_result)
+                return self._metadata
+
+        declared = RecordingFetcher(MediaMetadata(number="PHASE-001", title="FromDeclared"))
+        first_phase = RecordingFetcher(MediaMetadata(number="PHASE-001", title="FromPhase1"))
+        catalog = (SourceDescriptor(id="javdb", name="javdb", traits=frozenset({"needs_partial"})),)
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"dmm": first_phase, "javdb": declared}),
+            resource_store=resource_store,
+            pipeline_config=HotSettings(),
+            source_catalog=catalog,
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/PHASE-001.mp4")
+        result = await h.handle(
+            ScrapePayload(media_file_id=media.id, number="PHASE-001", content_type=ContentType.CENSORED)
+        )
+
+        assert result.success is True
+        assert first_phase.partials == [None]
+        assert len(declared.partials) == 1
+        # dmm 是默认路由里各标量字段的链首且在第一段已返回, 其取值必须出现在第二段的入参上.
+        assert declared.partials[0] is not None
+        assert declared.partials[0].title == "FromPhase1"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_builtin_trait_defers_without_injected_catalog(self, repo: Repository, resource_store):
+        """未注入来源目录时, 内置来源的 traits 由 profile 合成的 descriptor 提供."""
+
+        class RecordingFetcher:
+            def __init__(self, metadata: MediaMetadata) -> None:
+                self._metadata = metadata
+                self.partials: list[AggregatedMetadata | None] = []
+
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                self.partials.append(query.partial_result)
+                return self._metadata
+
+        declared = RecordingFetcher(MediaMetadata(number="PHASE-002", title="FromOfficial"))
+        first_phase = RecordingFetcher(MediaMetadata(number="PHASE-002", title="FromDMM"))
+        h = ScrapeHandler(
+            repo=repo,
+            factory=FakeFactory({"dmm": first_phase, "official": declared}),
+            resource_store=resource_store,
+            pipeline_config=_config_with({ContentType.CENSORED: [SiteName.DMM, SiteName.OFFICIAL]}),
+        )
+        media = await repo.create_media_file(library_id=1, path="/media/PHASE-002.mp4")
+        result = await h.handle(
+            ScrapePayload(media_file_id=media.id, number="PHASE-002", content_type=ContentType.CENSORED)
+        )
+
+        assert result.success is True
+        assert first_phase.partials == [None]
+        assert declared.partials[0] is not None
+        assert declared.partials[0].title == "FromDMM"
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_materializes_cropped_poster(self, repo: Repository, resource_store):
@@ -266,7 +424,7 @@ class TestContentRoutesFiltering:
 
         assert result.success is False
         assert result.error is not None
-        assert "No eligible crawlers" in result.error
+        assert "没有可用来源" in result.error
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_custom_prefix_overrides_content_type_route(self, repo: Repository, resource_store):
@@ -384,7 +542,7 @@ class TestScrapeTranslation:
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_translator_failure_keeps_original(self, repo: Repository, factory, resource_store):
-        """translator 抛异常时降级保留原值, 刮削不失败 (机会主义)."""
+        """translator 抛异常时降级保留原值, 刮削不失败 (失败即跳过)."""
         from amane.enums import Language, MetadataField
 
         class BrokenTranslator:
@@ -430,6 +588,88 @@ class TestRefreshHandler:
         assert result.result.added == 2
         assert result.result.removed == 0
         assert result.result.scrape == 2
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_unscoped_scan_writes_cleanup_inventory(self, repo: Repository, tmp_path: Path):
+        """整库范围的入库扫描顺带产出清单: 无效文件与空目录都在里面, 面板不必再扫一次."""
+        (tmp_path / "MIDV-123.mp4").write_bytes(b"\x00" * 100)
+        (tmp_path / "ad.mp4").write_bytes(b"\x00" * 10)
+        (tmp_path / "empty").mkdir()
+        lib = await repo.create_library(name="t", path=str(tmp_path), write_nfo=False, blacklist_patterns=["ad"])
+        assert lib.id is not None
+        store = InventoryStore()
+
+        result = await RefreshHandler(repo=repo, inventory_store=store).handle(
+            RefreshPayload(library_id=lib.id, path=str(tmp_path), scrape=set())
+        )
+
+        assert result.success is True
+        inventory = store.latest(lib.id, InventorySource.RULES)
+        assert inventory is not None
+        assert inventory.scope_path is None
+        assert {entry.path.name for entry in inventory.entries} == {"ad.mp4", "empty"}
+        assert [hit.path.name for hit in inventory.media_hits] == ["MIDV-123.mp4"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_scoped_scan_leaves_inventory_alone(self, repo: Repository, tmp_path: Path):
+        """子目录巡检不代表整库, 不覆盖面板用的清单."""
+        sub = tmp_path / "sub"
+        sub.mkdir()
+        (sub / "ad.mp4").write_bytes(b"\x00" * 10)
+        lib = await repo.create_library(name="t", path=str(tmp_path), write_nfo=False, blacklist_patterns=["ad"])
+        assert lib.id is not None
+        store = InventoryStore()
+
+        result = await RefreshHandler(repo=repo, inventory_store=store).handle(
+            RefreshPayload(library_id=lib.id, path=str(sub), scrape=set())
+        )
+
+        assert result.success is True
+        assert store.latest(lib.id, InventorySource.RULES) is None
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_truncated_inventory_keeps_media_complete(
+        self,
+        repo: Repository,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        candidates_first_scandir: None,
+    ):
+        """清单触顶不影响入库扫描的媒体收集: add+remove 据此判定存在性, 缺项会删掉磁盘上还在的索引行."""
+        for index in range(20):
+            (tmp_path / f"NSFS-{index:03d}.mp4").write_bytes(b"\x00" * 100)
+        for index in range(3):
+            (tmp_path / f"ad-{index}.mp4").write_bytes(b"\x00" * 10)
+        lib = await repo.create_library(name="t", path=str(tmp_path), write_nfo=False, blacklist_patterns=["ad-"])
+        assert lib.id is not None
+        rows = []
+        for index in range(20):
+            row = await repo.create_media_file(lib.id, path=str(tmp_path / f"NSFS-{index:03d}.mp4"))
+            assert row.id is not None
+            rows.append(row)
+
+        real_scan = scan_inventory
+
+        async def small_limit(scope_dir, **kwargs):
+            kwargs["limit"] = 1
+            return await real_scan(scope_dir, **kwargs)
+
+        monkeypatch.setattr("amane.handlers.refresh.scan_inventory", small_limit)
+
+        result = await RefreshHandler(repo=repo).handle(
+            RefreshPayload(
+                library_id=lib.id,
+                path=str(tmp_path),
+                scan={ScanMode.add, ScanMode.remove},
+                scrape=set(),
+            )
+        )
+
+        assert result.success is True
+        assert result.result is not None
+        assert result.result.removed == 0
+        for row in rows:
+            assert await repo.get_media_file(row.id) is not None
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_handle_files(self, repo: Repository, tmp_path):
@@ -619,11 +859,23 @@ class TestRefreshHandler:
         assert media.path == str(stored)
 
         listed = tmp_path / f"{nfd}.mp4"
+        library_id = lib.id
+        assert library_id is not None
 
-        async def fake_scan(*_args: object, **_kwargs: object) -> list[LibraryHit]:
-            return [LibraryHit(listed, LibraryFileKind.MEDIA)]
+        async def fake_scan(*_args: object, **_kwargs: object) -> CleanupInventory:
+            return CleanupInventory(
+                inventory_id="test",
+                library_id=library_id,
+                root=tmp_path,
+                scope_path=None,
+                recursive=True,
+                patterns=(),
+                source=InventorySource.RULES,
+                created_at=datetime.now(UTC),
+                media_hits=[LibraryHit(listed, LibraryFileKind.MEDIA)],
+            )
 
-        monkeypatch.setattr("amane.handlers.refresh.scan_library", fake_scan)
+        monkeypatch.setattr("amane.handlers.refresh.scan_inventory", fake_scan)
         result = await RefreshHandler(repo=repo).handle(
             RefreshPayload(
                 library_id=lib.id,
@@ -685,7 +937,7 @@ class TestRefreshHandler:
 
         assert result.success is False
         assert result.error is not None
-        assert "not a directory" in result.error.lower()
+        assert "不是目录" in result.error
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_submits_scrape_tasks_with_correct_payload(self, repo: Repository, tmp_path):

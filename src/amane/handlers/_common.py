@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 
 
 class LibraryTaskLocks:
-    """同库 TRASH 与 ORGANIZE 共用, 执行期串行."""
+    """同库 ORGANIZE 与 DELETE 共用, 执行期串行."""
 
     def __init__(self) -> None:
         self._locks: dict[int, asyncio.Lock] = {}
@@ -37,10 +37,10 @@ def _maybe_file(f: Path) -> bool:
 
 @in_thread
 def scan_library(scan_dir: Path, *, recursive: bool, scan: LibraryScan) -> list[LibraryHit]:
-    """目录本身与回收站不产出."""
+    """目录本身与回收目录不产出."""
     glob_pattern = "**/*" if recursive else "*"
     hits: list[LibraryHit] = []
-    # 跳过目录与回收站; 其余按规则分类.
+    # 跳过目录与回收目录; 其余按规则分类.
     for file_path in scan_dir.glob(glob_pattern):
         if not _maybe_file(file_path):
             continue

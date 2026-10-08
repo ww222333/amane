@@ -98,9 +98,9 @@ async def test_empty_file_range_is_416_with_detail(tmp_path: Path) -> None:
 @pytest.mark.parametrize(
     ("range_header", "detail"),
     [
-        ("bytes=0-1,3-4", "不支持多段 Range"),
-        ("bytes=abc", "Range 无法解析"),
-        ("items=0-1", "Range 无法解析"),
+        ("bytes=0-1,3-4", "不支持多段请求"),
+        ("bytes=abc", "分段请求无法解析"),
+        ("items=0-1", "分段请求无法解析"),
     ],
 )
 async def test_file_response_invalid_range_rejected(tmp_path: Path, range_header: str, detail: str) -> None:
@@ -239,7 +239,7 @@ async def test_file_response_stops_reading_after_disconnect(tmp_path: Path) -> N
     """断开消息已经等在通道里时不再输出正文.
 
     ASGI 服务器在客户端离开后让 ``send`` 静默成功, 读取循环只看 ``send`` 不会停止; 这里让
-    ``receive`` 一开始就报告断连, 断言正文一块都不发, 句柄已关闭, 且至多提交了一次已在途的读取.
+    ``receive`` 一开始就报告断连, 断言正文一块都不发, 句柄已关闭, 且至多提交了一次已开始的读取.
     """
     path = tmp_path / "clip.mp4"
     path.write_bytes(PAYLOAD)

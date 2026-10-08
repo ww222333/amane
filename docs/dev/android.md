@@ -5,9 +5,7 @@
 
 ## 进程模型
 
-Android 端是**远程客户端**: 服务端 (FastAPI + SQLite + 运行期加载的 Python 插件) 无法打包进 APK, 也没有必要 — 媒体库、Emby 集成与任务系统都在服务器上.
-
-实现见 `androidapp/app/src/main/kotlin/com/github/sqzwx/amane/android/`: `BrowserActivity` 是 WebView 宿主与桥的挂载点, `MainActivity` 与 `PopupActivity` 是它的两个子类, `SetupActivity` 是服务器列表, `ShellBridge` 是页面可见的桥, `SwipeRowLayout` 承担服务器的左滑操作区.
+Android 端是**远程客户端**: 服务端 (FastAPI + SQLite + 运行期加载的 Python 插件) 无法打包进 APK, 也没有必要 — 媒体库、Emby 集成与任务系统都在服务器上. 实现见 `androidapp/app/src/main/kotlin/com/github/sqzwx/amane/android/`: `BrowserActivity` 是 WebView 宿主与桥的挂载点, `MainActivity` 与 `PopupActivity` 是它的两个子类, `SetupActivity` 是服务器列表, `ShellBridge` 是页面可见的桥.
 
 ## origin 契约
 
@@ -34,28 +32,28 @@ Android 端是**远程客户端**: 服务端 (FastAPI + SQLite + 运行期加载
 
 ## 界面归属与桥
 
-壳不渲染工具栏: 页面自带头部, 壳只保留加载进度条与原生错误界面. 服务器切换与运行期信息都在壳内的「客户端设置」页 (入口见 [frontend.md](frontend.md)). 不提供单独的「退出登录」: 切换服务器保留既有会话, 失效由页面的 401 拦截送回服务器页, 单独的退出登录没有额外作用.
+壳不渲染工具栏: 页面自带头部, 壳只保留加载进度条与原生错误界面. 服务器切换与运行期信息都在壳内的「客户端设置」页 (入口见 [frontend.md](frontend.md)). 不提供单独的「退出登录」: 切换服务器保留既有会话, 失效由页面的 401 拦截送回服务器页.
 
 是否在壳内由 **UA 标记**判定 (`WebSettings.userAgentString` 追加的 `AmaneShell/<version>`, 每个请求都带), 不是 JS 桥: 桥只承载动作, 缺了它页面仍须列出入口, 以桥为判据会让入口在部分加载下整块消失. 桌面浏览器与 Docker 部署没有该标记, 入口不出现.
 
-桥只承载 `ShellBridge.kt` 里声明的那几件事, 不接受参数; 页面侧的对应接口与消费方见 `web/src/lib/shell.ts`. **内核版本只取自 UA 里的 `Chrome/<版本>`**: 厂商包版本与 Chromium 版本没有对应关系, 用它比较前端下限会误报. 商店链接也只在提供方是 Google 发行的包 (`com.google.android.webview` / `com.android.chrome`) 时给出 — 厂商自带的 WebView 在 Play 上没有条目.
+桥只承载 `ShellBridge.kt` 里声明的那几件事, 不接受参数; 页面侧的对应接口与消费方见 `web/src/lib/shell.ts`. **内核版本只取自 UA 里的 `Chrome/<版本>`**: 厂商包版本与 Chromium 版本没有对应关系, 用它比较前端下限会误报. 商店链接也只在提供方是 Google 发行的包时给出 — 厂商自带的 WebView 在 Play 上没有条目.
 
-`addJavascriptInterface` 对 WebView 加载的文档全部可见, 因此站外链接必须交给系统浏览器. 弹窗与 `window.open` 的过渡 WebView 都可能落到站外文档 (SPA 里多处 `target="_blank"` 的外链), 因此它们不装桥, 并与主窗口共用同一条站内判据.
+`addJavascriptInterface` 对 WebView 加载的文档全部可见, 因此站外链接必须交给系统浏览器. 弹窗与 `window.open` 的过渡 WebView 都可能落到站外文档, 因此它们不装桥, 并与主窗口共用同一条站内判据.
 
-**启动看门狗**: 主文档加载成功不等于页面能用 — 页面在挂载前抛异常时 (WebView 低于前端下限即是这种情况), 页面自己的错误界面不会出现, 用户看到的只是一张空白页. 壳在 `onPageFinished` 后检查 `#root` 是否有子节点, 两次检查仍为空则显示原生错误界面, 这是该情况下唯一的重试与换服务器出口.
+**启动看门狗**: 主文档加载成功不等于页面能用 — 页面在挂载前抛异常时 (WebView 低于前端下限即是这种情况), 页面自己的错误界面不会出现, 用户看到的只是一张空白页. 壳在 `onPageFinished` 后检查 `#root` 是否有子节点, 两次检查仍为空则显示原生错误界面, 这是该情况下唯一的重试与切换服务器途径.
 
 ## 平台功能
 
 - **主文档加载失败**: 显示原生错误页 (重试 / 换服务器), 不使用 WebView 自带的错误页 — 局域网服务器关机会经常遇到.
-- **下拉刷新**: `SwipeRefreshLayout` 包住 WebView (WebView 自身没有该手势), 松开即 `reload()`, 加载结束或失败时收起指示器, 全屏播放期间禁用. 手势优先级低于页面内部滚动: `SwipeRefreshLayout` 只依据 WebView 自身的滚动位置, 而 SPA 的滚动多在内部容器里, 因此页面在 `touchstart` 实测触点处还有没有可向上滚的内容并经桥推送至壳, 由壳在手势起点决定是否接管 (`web/src/lib/pull-refresh.ts`).
-- **文件选择**: WebView 自身不实现文件选择器, `<input type="file">` 必须由系统选择器接管; 取消与异常要回 `null`, 否则页面上的输入一直停在等待状态.
+- **下拉刷新**: `SwipeRefreshLayout` 包住 WebView, 松开即 `reload()`, 加载结束或失败时收起指示器, 全屏播放期间禁用. 接管需同时满足两条, 缺一都会误触: 触点处已无法向上滚动 — `SwipeRefreshLayout` 只依据 WebView 自身的滚动位置, 而 SPA 的滚动多在内部容器里 (那里恒为 0), 该判据因此由页面在 `touchstart` 实测并经桥推送至壳 (`web/src/lib/pull-refresh.ts`); 纵向位移压过横向 — 基类只比较纵位移是否越过 touchSlop, 横向滑动伴随的纵向偏移会被当成下拉, 方向改由 `AxisLockSwipeRefreshLayout` 在手势起手处判定.
+- **文件选择**: WebView 自身不实现文件选择器, `<input type="file">` 必须由系统选择器接管.
 - **下载**: `Content-Disposition: attachment` 交给 `DownloadManager`; 它在独立进程, 不共享 cookie 罐, 因此显式写入 `Cookie` 请求头. 附件型 `window.open` 同样交给它, 真页面才另起 `PopupActivity`.
-- **全屏视频**: `onShowCustomView` 的自定义视图 (`<video>` 与页面自己的 Fullscreen API 都走这条路), 同时收起系统栏并把方向锁到传感器横屏 (竖屏全屏会把画面挤在中间), 期间根容器的 inset 内边距归零; 返回键先请求页面退出全屏, 超时未退出则按原生方式收起; 全屏期间按 Home 键切换为画中画. 页面侧另有同一用途的方向锁, 供浏览器使用 (见 [frontend.md](frontend.md)).
-- **浅色 / 深色**: 算法深色 (强深色) 必须在页面侧与壳侧都关掉. 页面自己按用户设置在深浅两套之间切换, 内核在系统深色时再叠一层会把浅色主题反转成另一种深色; 页面侧由 `web/src/global.css` 把壳内根元素 (`data-amane-shell`) 的 `color-scheme` 钉成 `dark`, 内核只对"用色方案为浅色"的页面叠加算法深色, 换掉这一项它就不再动手; 壳侧调 `setAlgorithmicDarkeningAllowed(false)`, 旧内核回退到 `setForceDark(FORCE_DARK_OFF)` — Android 13 以上且 targetSdk ≥ 33 时旧接口是空操作, 低于 Chromium 105 的 WebView 又不支持前者, 只靠任何一侧都会漏. `prefers-color-scheme` 由应用主题 (DayNight) 决定, 与这个开关无关, 「跟随系统」这一档不受影响.
+- **全屏视频**: `onShowCustomView` 的自定义视图 (`<video>` 与页面自己的 Fullscreen API 都经由这条路径), 同时收起系统栏并把方向锁到传感器横屏, 期间根容器的 inset 内边距归零; 返回键先请求页面退出全屏, 超时未退出则按原生方式收起; 全屏期间按 Home 键切换为画中画.
+- **浅色 / 深色**: 算法深色 (强深色) 必须在页面侧与壳侧都关掉, 只靠任何一侧都会漏. 页面自己按用户设置在深浅两套之间切换, 内核在系统深色时再叠一层会把浅色主题反转成另一种深色; 页面侧由 `web/src/global.css` 把壳内根元素 (`data-amane-shell`) 的 `color-scheme` 钉成 `dark`, 换掉这一项内核就不再套用算法深色; 壳侧新内核用 `setAlgorithmicDarkeningAllowed(false)`, 旧内核回退到 `setForceDark(FORCE_DARK_OFF)` — Android 13 以上且 targetSdk ≥ 33 时旧接口是空操作, 低于 Chromium 105 的 WebView 又不支持前者. `prefers-color-scheme` 由应用主题 (DayNight) 决定, 与这个开关无关.
 
 窗口 inset 以原生 padding 施加在根容器上, 页面不使用 `env(safe-area-inset-*)`: WebView 的视口因此等于安全区, SPA 既有视口高度计算无需改动 (见 [frontend.md](frontend.md)). 壳没有自己的栏, 状态栏区域显示系统背景 (跟随 DayNight), 页面头部不会被状态栏压住.
 
-`usesCleartextTraffic="true"` 是刻意的: 网络策略不能按用户在运行期填写的地址放开明文, 而自建服务默认走 `http://`. 非局域网部署应自备 HTTPS 反代.
+`usesCleartextTraffic="true"` 是刻意的: 网络策略不能按用户在运行期填写的地址放开明文, 而自建服务默认使用 `http://`. 非局域网部署应自备 HTTPS 反代.
 
 ## WebView 运行期
 
@@ -67,9 +65,9 @@ Android 端是**远程客户端**: 服务端 (FastAPI + SQLite + 运行期加载
 
 ## 打包与分发
 
-**APP 版本独立于服务端与桌面端**: 唯一来源是 `androidapp/version.txt`, 构建脚本与 Gradle 都读取它, `versionName` 与 `versionCode` 由 semver 推导; `versionCode` 必须随版本单调递增 — Android 拒绝降级覆盖安装. 签名配置读取 `androidapp/keystore.properties` (不入库), 缺席时回退到 debug 包; CI 经仓库 secret 提供同一份密钥.
+**APP 版本独立于服务端与桌面端**: 唯一来源是 `androidapp/version.txt`, 构建脚本与 Gradle 都读取它, `versionName` 与 `versionCode` 由 semver 推导; `versionCode` 必须随版本单调递增 — Android 拒绝降级覆盖安装. 签名密钥由 CI 从仓库 secret 写入 `androidapp/keystore.properties` (不入库), 只此一份且必须在仓库外备份: 密钥缺失、更换或退回 debug 密钥都会让产物签名与已装版本不同, 用户只能卸载重装, 服务器列表与 token (app 私有存储) 一并丢失. CI 在密钥缺席时直接失败, 打包后再校验产物未使用 debug 证书; 只有本机构建才回退到 debug 包.
 
-发版**完全独立**: 只有 `app-` 前缀的 tag 触发 APK 构建与 Release, 本体的 `v*` 不产出 APK — 本体发版通常不含 APP 变更, 每次都附一份 APK 会让下载的人以为 APP 也更新了. 这些 tag 解析不出版本, 本体的更新检查会跳过它们 (检查读取发布列表而不是 `/releases/latest`, 见 `src/amane/release.py`); APP 发布也不占用 Releases 页的 Latest 徽标. 分发方式是 GitHub Release 上的 APK 侧载; 应用商店对本项目的媒体内容域不可行, 因此不引入 Play 相关的签名托管与更新机制.
+发版**完全独立**: 只有 `app-` 前缀的 tag 触发 APK 构建与 Release, 本体的 `v*` 不产出 APK — 本体发版通常不含 APP 变更, 每次都附一份 APK 会让下载的人以为 APP 也更新了. 这些 tag 解析不出版本, 本体的更新检查会跳过它们 (检查读取发布列表而不是 `/releases/latest`, 见 `src/amane/release.py`); APP 发布也不占用 Releases 页的 Latest 徽标. Release 正文手工填写, 不用自动生成 — 自动生成以上一个 Release (`v*`) 为起点, 会把服务端与桌面端的提交算进 APP 发版. 分发方式是 GitHub Release 上的 APK 侧载; 应用商店对本项目的媒体内容域不可行, 因此不引入 Play 相关的签名托管与更新机制.
 
 PR 门禁由 `.github/workflows/ci.yaml` 的 `android` job 执行 `just android-check`; 它前面有一个轻量 job 先判断改动有没有碰到 APP, 没碰到就整块跳过 — 该 job 要装 JDK 与 Android SDK 再跑 Gradle, 而 APP 的改动很少. 这里用 job 级条件而不是工作流级 `paths`: 后者会让整个工作流不触发, 被设为必需的门禁检查会一直停在 pending.
 

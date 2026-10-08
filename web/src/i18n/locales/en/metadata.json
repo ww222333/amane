@@ -12,7 +12,7 @@
     "hasSubtitle": "Chinese subtitles",
     "uncensored": "Uncensored",
     "mosaic": "Mosaic mark",
-    "definition": "Definition",
+    "definition": "Resolution",
     "contentType": "Content type",
     "any": "Any",
     "yes": "Yes",
@@ -56,12 +56,12 @@
     "scrape": "Re-scrape",
     "batchScrape": "Batch Re-scrape",
     "batchDelete": "Batch Delete",
-    "confirmBatchDeleteTitle": "Delete selected metadata?",
-    "confirmBatchDeleteDesc_one": "This will permanently delete the selected metadata entries.",
-    "confirmBatchDeleteDesc_other": "This will permanently delete the selected metadata entries."
+    "confirmBatchDeleteTitle": "Delete selected films?",
+    "confirmBatchDeleteDesc_one": "This will permanently delete the selected films",
+    "confirmBatchDeleteDesc_other": "This will permanently delete the selected films"
   },
   "edit": {
-    "title": "Edit Metadata"
+    "title": "Edit film"
   },
   "detail": {
     "fields": {
@@ -80,10 +80,11 @@
       "poster": "Poster",
       "thumb": "Cover",
       "extrafanart": "Fanart",
-      "sourceUrls": "External Links"
+      "sourceUrls": "Source Links"
     },
     "connections": "Related Files",
     "noFiles": "No related files",
+    "openInLibrary": "Open in library",
     "userTags": "User tags",
     "noUserTags": "No user tags yet",
     "selectUserTag": "Select or type a user tag…",
@@ -106,15 +107,15 @@
     "commentSortNewest": "Newest first",
     "commentSortOldest": "Oldest first",
     "deleteCommentTitle": "Delete comment",
-    "deleteCommentMessage": "This cannot be undone.",
+    "deleteCommentMessage": "This cannot be undone",
     "playTrailer": "Play trailer",
     "closeTrailer": "Close trailer",
     "coverUnavailable": "Cover unavailable",
     "playback": "Playback",
     "playbackFailed": "This stream could not be played",
     "playbackFailedWithStatus": "This stream could not be played (HTTP {{status}})",
-    "playbackFailedHls": "This stream could not be played (hls.js error type {{details}}): {{url}}",
-    "playbackFailedHlsWithStatus": "This stream could not be played (hls.js error type {{details}}, HTTP {{status}}): {{url}}",
+    "playbackFailedHls": "This stream could not be played (player error {{details}}): {{url}}",
+    "playbackFailedHlsWithStatus": "This stream could not be played (player error {{details}}, HTTP {{status}}): {{url}}",
     "playbackUnsupported": "This source's media type cannot play on this page",
     "playbackUnavailable": "This source is currently unavailable",
     "playbackUnavailableOption": "{{name}} (currently unavailable)",
@@ -163,7 +164,7 @@
       "series": "Series",
       "user_tag": "User tags"
     },
-    "filterInMeta": "Filter in library",
+    "filterInMeta": "Filter in films",
     "scrapeActor": "Scrape",
     "scrapeQueued": "Actor scrape task queued",
     "person": {
@@ -185,11 +186,13 @@
       "cup": "Cup",
       "overview": "Overview",
       "tagline": "Tagline",
-      "sourceUrl": "Source",
+      "sourceUrl": "Source link",
       "images": "Photos",
       "cm": "{{value}} cm",
       "birthdayFormat": "Format: 2000-01-01, 2000/1/1, or 2000年1月1日"
-    }
+    },
+    "tagFilms": "Titles",
+    "tagActors": "Actors"
   },
   "view": {
     "grid": "Grid",
@@ -224,12 +227,12 @@
     "batchGenderFailed_one": "Failed to update {{count}} actor",
     "batchGenderFailed_other": "Failed to update {{count}} actors",
     "clearPerson": "Clear info",
-    "clearPersonBody": "Clear all info for \"{{name}}\" except gender. Does not delete the entry or scrape cache",
+    "clearPersonBody": "Clear all info for \"{{name}}\" except gender and remove all field locks. Does not delete the entry or scrape cache",
     "clearPersonDone": "Person info cleared",
     "batchClearPerson": "Clear info",
-    "batchClearPersonBody": "Clear all info except gender for {{count}} actors. Does not delete entries or scrape cache",
-    "batchClearPersonBody_one": "Clear all info except gender for {{count}} actor. Does not delete the entry or scrape cache",
-    "batchClearPersonBody_other": "Clear all info except gender for {{count}} actors. Does not delete entries or scrape cache",
+    "batchClearPersonBody": "Clear all info except gender for {{count}} actors and remove all field locks. Does not delete entries or scrape cache",
+    "batchClearPersonBody_one": "Clear all info except gender for {{count}} actor and remove all field locks. Does not delete the entry or scrape cache",
+    "batchClearPersonBody_other": "Clear all info except gender for {{count}} actors and remove all field locks. Does not delete entries or scrape cache",
     "batchClearPersonDone": "Cleared person info for {{count}} actor(s)",
     "batchClearPersonDone_one": "Cleared person info for {{count}} actor",
     "batchClearPersonDone_other": "Cleared person info for {{count}} actors",
@@ -243,28 +246,37 @@
     "cupShort": "Cup {{cup}}",
     "filmography": "Filmography ({{count}})",
     "noPhoto": "No photo",
-    "goToLibrary": "Go to library",
+    "goToLibrary": "Go to films",
     "editTitle": "Edit actor",
+    "lockManage": "Profile field locks",
+    "cropAvatar": {
+      "action": "Crop photo",
+      "title": "Crop photo",
+      "success": "Photo updated"
+    },
     "genderHint": "When unknown, only generic sources are queried to avoid false matches. Some sources can fill this field automatically",
-    "genderUnknownHint": "",
+    "genderUnknownHint": "Use when the gender cannot be determined; scraping only queries sites covering both",
     "aliasesHint": "Press Enter or comma to add; click × to remove",
     "setDisplayName": "Set as display name",
     "setDisplayNameBody": "Make \"{{alias}}\" the display name of \"{{name}}\"? \"{{name}}\" will be kept as an alias",
     "setDisplayNameDone": "Display name updated",
     "imagesEdit": "Photo URLs",
-    "imagesEditHint": "First URL is the primary photo (detail + grid). Drag cards to reorder; click to preview.",
+    "imagesEditHint": "First URL is the primary photo (detail + grid). Drag cards to reorder; click to preview",
     "primaryImage": "Primary",
     "reorderImage": "Drag to reorder photo",
     "removeImage": "Remove this photo",
     "rawSources": "Scrape source snapshots",
-    "rawSourcesHint": "",
+    "rawSourcesHint": "Raw per-site snapshots, read-only; used for offline re-aggregation",
     "filmography_one": "Filmography ({{count}})",
-    "filmography_other": "Filmography ({{count}})"
+    "filmography_other": "Filmography ({{count}})",
+    "viewAll": "View all {{count}}",
+    "viewAll_one": "View all {{count}}",
+    "viewAll_other": "View all {{count}}"
   },
-  "notFound": "Metadata not found",
-  "invalidId": "Invalid metadata ID",
-  "confirmDelete": "Delete metadata #{{id}}? This cannot be undone.",
-  "empty": "No metadata records",
+  "notFound": "Film not found",
+  "invalidId": "Invalid film ID",
+  "confirmDelete": "Delete film #{{id}}? This cannot be undone",
+  "empty": "No films",
   "editor": {
     "title": {
       "label": "Title"
@@ -316,7 +328,7 @@
       "label": "External IDs"
     },
     "source_urls": {
-      "label": "Source URLs"
+      "label": "Source Links"
     }
   },
   "manage": {
@@ -329,21 +341,21 @@
     "mergeConfirmBody": "Merge {{count}} sources into the target",
     "mergeConfirmBody_one": "Merge {{count}} source into the target",
     "mergeConfirmBody_other": "Merge {{count}} sources into the target",
-    "deleteFacetBody": "Remove \"{{name}}\" from all titles and add it to the blocklist; later scrapes will drop it",
+    "deleteFacetBody": "Remove \"{{name}}\" from all titles and add it to the drop list; later scrapes will drop it",
     "deleteUserTagBody": "Permanently delete user tag \"{{name}}\"? It will be removed from all titles",
-    "rulesTitle": "User rules",
-    "rulesHint": "Scrapes rename by alias and drop blocklist names. Removing a rule does not change existing titles",
+    "rulesTitle": "Facet rules",
+    "rulesHint": "Scrapes rename by alias and drop excluded names. Removing a rule does not change existing titles",
     "rulesEmpty": "No rules yet",
     "ruleSource": "Source",
     "ruleAction": "Action",
     "ruleTarget": "Target",
-    "ruleBlock": "Block",
+    "ruleBlock": "Drop",
     "ruleAlias": "Alias",
     "ruleRemove": "Remove rule"
   },
   "merge": {
     "title": "Compare Sources",
-    "noRawData": "No raw data available for merge.",
+    "noRawData": "No raw data available for merge",
     "apply": "Apply Merge",
     "revert": "Revert",
     "revertAll": "Revert All",
@@ -352,5 +364,14 @@
     "noChanges": "No changes",
     "changedCount_one": "{{count}} field(s) changed",
     "changedCount_other": "{{count}} field(s) changed"
+  },
+  "lock": {
+    "manage": "Field Locks",
+    "all": "Lock All",
+    "clearAll": "Unlock All",
+    "locked": "Locked",
+    "unlocked": "Unlocked",
+    "toggleLocked": "Unlock field",
+    "toggleUnlocked": "Lock field"
   }
 }

@@ -1,4 +1,4 @@
-"""影片抓取图引擎与演员填空合并."""
+"""影片获取图引擎与演员填空合并."""
 
 from .actor import AggregatedActor, merge_actor_metadata, merge_actor_rows_fill_empty
 from .engine import (
@@ -12,11 +12,9 @@ from .engine import (
     FieldLanguage,
     FieldPriority,
     SourceKey,
-    Wave,
     aggregate,
     build_graph,
     compile_priority,
-    compute_waves,
     execute_graph,
 )
 from .merge import compute_merge_updates
@@ -37,12 +35,10 @@ __all__ = [
     "FieldPriority",
     "SourceKey",
     "SourcedScore",
-    "Wave",
     "aggregate",
     "build_graph",
     "compile_priority",
     "compute_merge_updates",
-    "compute_waves",
     "execute_graph",
     "merge_actor_metadata",
     "merge_actor_rows_fill_empty",

@@ -1,13 +1,23 @@
-from .actors import ActorListResponse, ActorResponse, ActorScrapeRequest, ActorUpdateRequest
+from .actors import (
+    ActorListResponse,
+    ActorLocksRequest,
+    ActorResponse,
+    ActorScrapeRequest,
+    ActorUpdateRequest,
+    ActorUserTagsRequest,
+    CropAvatarRequest,
+)
 from .comments import CommentCreateRequest, CommentResponse, CommentUpdateRequest
+from .crop import CropBoxRequest
 from .facets import (
-    FacetCreateRequest,
     FacetListResponse,
     FacetMergeRequest,
     FacetRenameRequest,
     FacetResponse,
     FacetRuleListResponse,
     FacetRuleResponse,
+    UserTagsCreateRequest,
+    UserTagsCreateResponse,
 )
 from .feeds import (
     FeedCreateRequest,
@@ -41,13 +51,14 @@ from .metadata import (
     MetadataBatchIdsRequest,
     MetadataBatchScrapeRequest,
     MetadataBatchScrapeResponse,
-    MetadataBatchUserTagsRequest,
-    MetadataBatchUserTagsResponse,
     MetadataDetailResponse,
     MetadataListResponse,
+    MetadataLocksRequest,
     MetadataResponse,
+    MetadataUserTagsRequest,
     PartialMetadata,
 )
+from .network import ConnectivityCheckRequest, ConnectivityItemResponse, ConnectivityReportResponse
 from .playback import (
     PlaybackSourceListResponse,
     PlaybackSourceOption,
@@ -61,11 +72,13 @@ from .system import DesktopResponse, ReleaseResponse
 from .tasks import (
     ActorScrapeSubmission,
     CleanupSubmission,
+    DeleteSubmission,
     OrganizeSubmission,
     R18ImportSubmission,
     RefreshSubmission,
     RescrapeSubmission,
     RoutineSubmission,
+    ScanInvalidSubmission,
     ScrapeRequest,
     ScrapeSubmission,
     TaskBatchAction,
@@ -78,24 +91,30 @@ from .tasks import (
     TaskResponse,
     TaskSubmission,
     TaskWorkerResponse,
-    TrashSubmission,
     UpscaleSubmission,
 )
-from .user_tags import UserTagResponse
+from .user_tags import UserTagLinksResponse, UserTagResponse
 
 __all__ = [
     "ActorListResponse",
+    "ActorLocksRequest",
     "ActorResponse",
     "ActorScrapeRequest",
     "ActorScrapeSubmission",
     "ActorUpdateRequest",
+    "ActorUserTagsRequest",
     "CleanupSubmission",
     "CommentCreateRequest",
     "CommentResponse",
     "CommentUpdateRequest",
+    "ConnectivityCheckRequest",
+    "ConnectivityItemResponse",
+    "ConnectivityReportResponse",
+    "CropAvatarRequest",
+    "CropBoxRequest",
     "CropPosterRequest",
+    "DeleteSubmission",
     "DesktopResponse",
-    "FacetCreateRequest",
     "FacetListResponse",
     "FacetMergeRequest",
     "FacetRenameRequest",
@@ -125,11 +144,10 @@ __all__ = [
     "MetadataBatchIdsRequest",
     "MetadataBatchScrapeRequest",
     "MetadataBatchScrapeResponse",
-    "MetadataBatchUserTagsRequest",
-    "MetadataBatchUserTagsResponse",
     "MetadataDetailResponse",
     "MetadataListResponse",
     "MetadataResponse",
+    "MetadataUserTagsRequest",
     "OptionalPathTemplateDefaults",
     "OrganizeSubmission",
     "PartialMetadata",
@@ -147,6 +165,7 @@ __all__ = [
     "ReleaseResponse",
     "RescrapeSubmission",
     "RoutineSubmission",
+    "ScanInvalidSubmission",
     "ScheduleCreateRequest",
     "ScheduleListResponse",
     "ScheduleResponse",
@@ -163,9 +182,11 @@ __all__ = [
     "TaskResponse",
     "TaskSubmission",
     "TaskWorkerResponse",
-    "TrashSubmission",
     "UpscaleSubmission",
+    "UserTagLinksResponse",
     "UserTagResponse",
+    "UserTagsCreateRequest",
+    "UserTagsCreateResponse",
     "normalize_feed_group",
     "path_template_schema",
 ]

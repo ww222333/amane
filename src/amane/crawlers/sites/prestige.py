@@ -4,18 +4,35 @@
 站点限定日本 IP: 非日本 IP 下 curl_cffi 得 CloudFront 403, 系统 curl 得地域限制文案.
 """
 
-from typing import Any
+from typing import Any, override
 
 from ...enums import SiteName
+from ...net.connectivity import ConnectivityOutcome, probe_get
 from ..base import Crawler, CrawlerProfile
 from ..http import RequestError
 from ..models import FetchOptions, MediaMetadata, SearchQuery, film_actors
+
+# 探测样本番号, 必须是在售商品: 站点对不存在的 SKU 返回 404, 探测结论会落成失败.
+_PROBE_SKU = "ABW-350"
 
 
 class PrestigeCrawler(Crawler):
     @classmethod
     def profile(cls) -> CrawlerProfile:
         return CrawlerProfile(name=SiteName.PRESTIGE, base_url="https://www.prestige-av.com")
+
+    @override
+    async def check_connectivity(self) -> ConnectivityOutcome:
+        """真实入口是 SKU JSON API; 首页带年龄墙, 探测首页会把可用的来源报成不可达."""
+        return await probe_get(
+            self.client.web_client,
+            self._sku_url(_PROBE_SKU),
+            cookies=self.cookies,
+            headers=self.headers,
+        )
+
+    def _sku_url(self, sku_id: str) -> str:
+        return f"{self.base_url}/api/sku/item/{sku_id}"
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
         number = query.number.upper()
@@ -32,7 +49,7 @@ class PrestigeCrawler(Crawler):
         last_error: RequestError | None = None
         any_ok = False
         for sku_id in candidates:
-            sku_url = f"{self.base_url}/api/sku/item/{sku_id}"
+            sku_url = self._sku_url(sku_id)
             try:
                 data = await self.client.get_json(sku_url)
             except RequestError as exc:
@@ -114,16 +131,18 @@ class PrestigeCrawler(Crawler):
         series_name = _extract_name(data.get("series"))
 
         def _image_url(path: str | None) -> str | None:
+            # 图片在站点自身的 /api/media/ 下: 新片为 {x}/{y}/{uuid}.jpg, 老片为 goods/prestige/...
             if not path:
                 return None
-            return f"https://image.prestige-av.com/{path}" if not path.startswith("http") else path
+            return f"{self.base_url}/api/media/{path}" if not path.startswith("http") else path
 
-        thumb_path = (data.get("thumbnail") or {}).get("path") if isinstance(data.get("thumbnail"), dict) else None
-        package_path = (
+        # thumbnail 是竖版前封, packageImage 是横版整幅; 槽位按朝向取 (poster 竖版 / thumb 横版), 故两字段交叉使用.
+        front_path = (data.get("thumbnail") or {}).get("path") if isinstance(data.get("thumbnail"), dict) else None
+        spread_path = (
             (data.get("packageImage") or {}).get("path") if isinstance(data.get("packageImage"), dict) else None
         )
-        thumb_url = _image_url(thumb_path)
-        poster_url = _image_url(package_path)
+        poster_url = _image_url(front_path)
+        thumb_url = _image_url(spread_path)
 
         extrafanart: list[str] = []
         for img_list_key in ("media",):

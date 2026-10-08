@@ -1,8 +1,8 @@
 {
   "title": "Logs",
   "empty": "No logs",
-  "noMatch": "No matching log entries.",
-  "searchPlaceholder": "level:ERROR AND source:scraper",
+  "noMatch": "No matching log entries",
+  "searchPlaceholder": "level:ERROR AND source:worker",
   "levels": {
     "debug": "Debug",
     "info": "Info",

@@ -1,4 +1,4 @@
-"""parse_file_info 表测试: 完整路径上的番号、内容类型、分集、字幕、马赛克、清晰度."""
+"""parse_file_info 表测试: 完整路径上的番号、内容类型、分集、字幕、马赛克、分辨率."""
 
 from typing import NamedTuple
 
@@ -67,7 +67,7 @@ CASES: list[object] = [
     _Case("MIDV-123-無碼流出.mp4", mosaic="leaked", number="MIDV-123"),
     _Case("MIDV-123-無碼破解.mp4", mosaic="cracked", number="MIDV-123"),
     _Case("MIDV-123-破解流出.mp4", mosaic="cracked", number="MIDV-123"),
-    # -U / -UC 是破解; -UC 同时是中字. 后面还可跟分片或清晰度
+    # -U / -UC 是破解; -UC 同时是中字. 后面还可跟分片或分辨率
     _Case("MIDV-123-UC-CD1.mp4", cd=1, has_subtitle=True, mosaic="cracked", number="MIDV-123"),
     _Case("MIDV-123-UC-4K.mp4", has_subtitle=True, mosaic="cracked", definition="4K", number="MIDV-123"),
     _Case("MIDV-123-UC-CD1-4K.mp4", cd=1, has_subtitle=True, mosaic="cracked", definition="4K", number="MIDV-123"),
@@ -79,7 +79,7 @@ CASES: list[object] = [
     _Case("HEYZO-123-1080p.mp4", mosaic="uncensored", definition="1080p", number="HEYZO-123"),
     _Case("HEYZO-123-流出.mp4", mosaic="leaked", number="HEYZO-123"),
     _Case("HEYZO-123-U.mp4", mosaic="cracked", number="HEYZO-123"),
-    # --- 清晰度: 点号 / 连字符 ---
+    # --- 分辨率: 点号 / 连字符 ---
     _Case("ABC-123.8K.mp4", definition="8K", number="ABC-123"),
     _Case("ABC-123-4K.mp4", definition="4K", number="ABC-123"),
     _Case("ABC-123.2160p.mp4", definition="4K", number="ABC-123"),
@@ -110,17 +110,27 @@ CASES: list[object] = [
     # 空格分隔
     _Case("ABC-123 4K.mp4", definition="4K", number="ABC-123"),
     _Case("ABC-123 1080p uncensored.mp4", mosaic="uncensored", definition="1080p", number="ABC-123"),
-    # 帧率后缀仍识别清晰度
+    # 帧率后缀仍识别分辨率
     _Case("ABC-123.1080p60.mp4", definition="1080p", number="ABC-123"),
     _Case("ABC-123.2160p30.mp4", definition="4K", number="ABC-123"),
-    # 分集 + 清晰度
+    # 分辨率数字不得被番号规则吸走: 无短横线的日期号 + 分辨率
+    _Case("120115_318-mura-1080p.mp4", definition="1080p", mosaic="uncensored", number="120115_318"),
+    _Case("120115_318-mura-720p.mp4", definition="720p", mosaic="uncensored", number="120115_318"),
+    _Case("120115_318-mura-2160p.mp4", definition="4K", mosaic="uncensored", number="120115_318"),
+    _Case("120115_318-mura-1440p.mp4", definition="1440p", mosaic="uncensored", number="120115_318"),
+    _Case("120115_318-mura-480p.mp4", definition="480p", mosaic="uncensored", number="120115_318"),
+    _Case("112912_776-mura-whole1_hd.wmv", definition="HD", mosaic="uncensored", number="112912_776"),
+    # 分集 + 分辨率
     _Case("MIDV-123-4K-CD1.mp4", cd=1, definition="4K", number="MIDV-123"),
-    # --- 清晰度误报: 番号/编码里的字母数字不当作独立标记 ---
+    # --- 分辨率误报: 番号/编码里的字母数字不当作独立标记 ---
     _Case("SKYHD-172.mp4", mosaic="uncensored", number="SKYHD-172"),
     _Case("ABC-123.HDTV.mp4", number="ABC-123"),
     _Case("ABC-123.4KS.mp4", number="ABC-123"),
     _Case("ABC-2160.mp4"),
     _Case("ABC-123.1080.mp4", number="ABC-123"),
+    # 带 p 的分辨率片段整段剥除, 数字不并入番号
+    _Case("ABC-2160p.mp4", definition="4K", number="ABC"),
+    _Case("natsume-1080p.mp4", definition="1080p", number="NATSUME"),
     _Case("ABC-123.mp4", number="ABC-123"),
     _Case("HD-123.mp4"),
     _Case("SD-123.mp4"),
@@ -179,7 +189,7 @@ CASES: list[object] = [
     _Case("/media/SSNI00321.mp4", number="SSNI-321", content_type=ContentType.CENSORED),
     _Case("/media/Mywife No.1234.mp4", number="Mywife No.1234", content_type=ContentType.CENSORED),
     _Case("/media/Vixen.23.04.15.mp4", content_type=ContentType.WESTERN),
-    # --- 完整路径: 马赛克可从目录名整段补; 清晰度仍只看文件名 ---
+    # --- 完整路径: 马赛克可从目录名整段补; 分辨率仍只看文件名 ---
     _Case(
         "/media/uncensored/4K/MIDV-123.mp4",
         mosaic="uncensored",
@@ -215,7 +225,7 @@ CASES: list[object] = [
     _Case("/media/流出物/MIDV-123.mp4", number="MIDV-123"),
     _Case("/media/UC/MIDV-123.mp4", number="MIDV-123"),
     _Case("/media/documentation/MIDV-123.mp4", number="MIDV-123"),
-    # 清晰度不从目录读 (盘符/分类夹)
+    # 分辨率不从目录读 (盘符/分类夹)
     _Case("/media/4K/MIDV-123.mp4", number="MIDV-123"),
     _Case("/media/1080p/MIDV-123.mp4", number="MIDV-123"),
     _Case("/media/HD/MIDV-123.mp4", number="MIDV-123"),

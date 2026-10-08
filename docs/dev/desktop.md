@@ -4,7 +4,7 @@
 
 ## 品牌标
 
-单一源 `assets/logo.svg`; 修改后执行 `just icons` 并提交衍生文件: WebUI favicon (`web/public/favicon.svg`)、macOS `assets/app.icns`、Windows `assets/app.ico` (托盘从 exe 抽同一份)、macOS 菜单栏模板字形 (只取 alpha 由系统着色 — 彩色徽标在菜单栏会糊成色块)、Android 自适应图标 (`androidapp/app/src/main/res/`: 渐变背景层 `drawable/ic_launcher_background.xml` + 白色字形 `mipmap-*/ic_launcher_foreground.png`). Android 拆两层是因为启动器会按圆形 / 圆角遮罩裁切, 只有中间 72dp 保证可见: 徽标底色留在背景层, 字形缩到安全区内, 中间的播放三角用遮罩镂空透出背景. `just icons` 需要 `rsvg-convert` 与 macOS `iconutil`; 衍生文件入库, 打包机不必装 librsvg.
+单一源 `assets/logo.svg`; 修改后执行 `just icons` 并提交衍生文件: WebUI favicon (`web/public/favicon.svg`)、macOS `assets/app.icns`、Windows `assets/app.ico` (托盘从 exe 抽同一份)、macOS 菜单栏模板字形 (只取 alpha 由系统着色 — 彩色徽标在菜单栏会糊成色块)、Android 自适应图标 (`androidapp/app/src/main/res/`: 背景层 + 安全区内的字形, 拆两层以适配启动器的圆形 / 圆角遮罩). `just icons` 需要 `rsvg-convert` 与 macOS `iconutil`; 衍生文件入库, 打包机不必装 librsvg.
 
 ## 进程模型
 
@@ -12,7 +12,7 @@ Python 只运行 HTTP (与 Docker / `just start` 同一入口 `amane.server`), �
 
 **macOS** 三个进程, Swift 是 App 入口, 菜单栏是兄弟进程而非服务的孩子:
 
-- **应用进程**: `macapp/Sources/Amane` → `Contents/MacOS/Amane`; Launch Services 登记为 `com.github.sqzw-x.amane` (必须是 NSApplication, 第二次打开才走系统单实例). 本进程设置环境、监督 Python、启动与回收菜单栏. 服务退出码 **0 / 130 / 143** 结束 App, **3** 立刻再次启动 Python (UI 继续活着), **4** 启动失败 (退避后重试, 原因写入状态文件), **126 / 127** exec 失败退出, 其它退避 2s; TERM 时先停两个子进程. Info.plist 含 `LSUIElement` + `LSMultipleInstancesProhibited`, 并设置 `AMANE_SUPERVISED=1`.
+- **应用进程**: `macapp/Sources/Amane` → `Contents/MacOS/Amane`; Launch Services 登记为 `com.github.sqzw-x.amane` (必须是 NSApplication, 第二次打开才经由系统单实例). 本进程设置环境、监督 Python、启动与回收菜单栏. 服务退出码 **0 / 130 / 143** 结束 App, **3** 立刻再次启动 Python (UI 继续活着), **4** 启动失败 (退避后重试, 原因写入状态文件), **126 / 127** exec 失败退出, 其它退避 2s; TERM 时先停两个子进程. Info.plist 含 `LSUIElement` + `LSMultipleInstancesProhibited`, 并设置 `AMANE_SUPERVISED=1`.
 - **服务进程**: PyInstaller onedir, 入口与导入约束见 [architecture.md](architecture.md).
 - **UI 进程**: 嵌套 `Contents/Resources/AmaneUI.app` (`com.github.sqzw-x.amane.ui`). 独立 bundle id 以免和主进程抢 NSApplication; 无状态, 只轮询 HTTP; `--watch-parent` 指向**应用进程** PID. `NSStatusItem` 只能在 `applicationDidFinishLaunching` 里创建 — 更早碰菜单栏时 WindowServer / CGS 尚未就绪, SkyLight 会断言退出.
 
@@ -37,7 +37,7 @@ Windows 壳是 Per-Monitor V2 (`winapp/app.manifest`): 未声明时系统把 `Tr
 | 复制 API Token | 壳拿到的 token 拷入剪贴板; 未传 (关鉴权) 时置灰 |
 | 退出 | 停壳; 壳先停 Python (就绪时经同一条 `POST /api/system/restart` 优雅停机, 因 stopping 不再再次启动; 否则 Kill), 再卸托盘 |
 
-bar 的静态信息**不走** `/api/health` — 后者是就绪契约 (Docker healthcheck); `/api/system/desktop` 是 bar 专属. 菜单字符串按系统 UI 语言 (zh / en), 不跟随前端浏览器语言. 壳等 bootstrap 写入 `data_dir/token` 后再带 `Authorization`.
+bar 的静态信息**不使用** `/api/health` — 后者是就绪契约 (Docker healthcheck); `/api/system/desktop` 是 bar 专属. 菜单字符串按系统 UI 语言 (zh / en), 不跟随前端浏览器语言. 壳等 bootstrap 写入 `data_dir/token` 后再带 `Authorization`.
 
 macOS UI argv (`AmaneUI --base-url http://127.0.0.1:PORT [--token <token>] [--watch-parent [pid]]`): `--base-url` 必传; `--token` 仅用于轮询 `Authorization`, 不进打开 Web UI 的 URL; `--watch-parent` 省略时回退 `getppid()`, pid ≤ 1 视为未监视. Windows 无独立 UI 进程与这组 argv; `AMANE_UI_ONLY=1` 只开托盘、不启动 Python, 对已有服务轮询.
 
@@ -70,6 +70,6 @@ macOS UI argv (`AmaneUI --base-url http://127.0.0.1:PORT [--token <token>] [--wa
 
 macOS: `scripts/build_macos_app.sh` (`just macos-app`), 需要 Swift 工具链 — PyInstaller 打成 onedir 后再组装 `.app`, `AmaneUI` 包成 `Contents/Resources/AmaneUI.app`, Info.plist 补 `LSUIElement` / `LSMultipleInstancesProhibited` / `CFBundleIconFile`. Windows: `scripts/build_windows_app.ps1` (`just windows-app`), **必须在 Windows 上运行** (PyInstaller 与 Native AOT 都不能从 macOS 交叉), 需要 .NET 8 SDK + 能链 Native AOT 的 MSVC.
 
-两边 PyInstaller 都要 `--add-data` 打进 `amane/db/migrations` 与 `amane/media/watermarks` (Docker wheel 靠 hatch `force-include`), 并按平台收集整个标准库 (`scripts/stdlib_modules.py` 列出顶层模块, 只排除依赖包外产物的 `tkinter` / `turtle` / `idlelib` / `turtledemo` / `ensurepip`, 构建脚本为每个名字加 `--collect-submodules`). **插件是运行时从数据目录动态加载的**, PyInstaller 的静态导入图看不见它们引用什么; 不整包收集就会出现「插件在 `just dev` 与 Docker 里能用, 装进桌面版报 `ModuleNotFoundError`」.
+两边 PyInstaller 都要打进 `amane/db/migrations` 与 `amane/media/watermarks`, 并按平台收集整个标准库 (见 `scripts/stdlib_modules.py`). **插件是运行时从数据目录动态加载的**, PyInstaller 的静态导入图看不见它们引用什么; 只收标准库之外的部分会让插件在桌面版报 `ModuleNotFoundError`. 简繁转换依赖 `zhconv` 的数据文件 `zhcdict.json`, 该文件同样不在静态导入图内, 两个打包脚本都必须收集 (`--collect-data zhconv`); 桌面包缺失该文件时简繁转换失败.
 
 开发回路: `just dev` 起服务, 壳侧用开发专用键指向未打包的 UI — macOS `AMANE_UI_BINARY`, Windows `AMANE_UI_ONLY=1` (只开托盘、不启动 Python). Android 端不监督本机服务, 见 [android.md](android.md).

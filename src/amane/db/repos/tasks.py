@@ -14,7 +14,7 @@ from .base import RepositoryMixinBase
 
 _ACTIVE_STATUSES = (TaskStatus.QUEUED, TaskStatus.RUNNING)
 # 互斥键在 payload 里; 同键已有 queued/running 则复用, 不另建行.
-# ORGANIZE / TRASH 每次新建; 同库串行由 handler 内的锁保证.
+# 其余类型每次新建; 同库串行由 handler 内的锁保证.
 _EXCLUSIVE_FIELDS: dict[TaskType, str] = {
     TaskType.ACTOR_SCRAPE: "actor_id",
 }
@@ -236,6 +236,23 @@ class TasksRepoMixin(RepositoryMixinBase):
             task.finished_at = _utcnow()
             session.add(task)
             await session.commit()
+
+    async def fail_running_task(self, task_id: int, error: str) -> bool:
+        """仅当任务仍为 RUNNING 时标记失败; 返回是否命中.
+
+        取消回退与取消兜底使用: 已进入终态的任务不得被覆盖为 FAILED.
+        """
+        async with self._session() as session:
+            task = await session.get(Task, task_id)
+            if task is None or task.status != TaskStatus.RUNNING:
+                return False
+            task.status = TaskStatus.FAILED
+            task.error = error
+            task.retries += 1
+            task.finished_at = _utcnow()
+            session.add(task)
+            await session.commit()
+            return True
 
     async def fail_all_running_tasks(self) -> int:
         """将全部 RUNNING 标为 FAILED (进程重启后的僵尸任务)."""

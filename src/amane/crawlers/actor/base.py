@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Protocol
 
 import structlog
 
+from ...net.connectivity import ConnectivityOutcome
 from .models import ActorMetadata
 
 if TYPE_CHECKING:
@@ -19,7 +20,7 @@ class ActorFetcher(Protocol):
 
 
 class ActorCrawler(ABC):
-    """默认 ``_search`` → ``_scrape``. 纯头像源可 override ``fetch()`` 直接查索引."""
+    """默认 ``_search`` → ``_scrape``. 纯头像来源可 override ``fetch()`` 直接查索引."""
 
     @classmethod
     @abstractmethod
@@ -57,6 +58,10 @@ class ActorCrawler(ABC):
         if not url:
             return None
         return await self._scrape(url)
+
+    async def check_connectivity(self) -> ConnectivityOutcome:
+        """连通性自检: 缺省 GET ``base_url``, 用与刮削相同的视图 (渲染来源经浏览器)."""
+        return await self.client.check(self.base_url, cookies=self.cookies, headers=self.headers)
 
     async def _search(self, name: str) -> str | None:
         raise NotImplementedError

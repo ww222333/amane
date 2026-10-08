@@ -31,13 +31,14 @@
     "failed": "Failed",
     "scrape": "Scrape",
     "organize": "Organize",
-    "trash": "Trash",
     "cleanup": "Cleanup",
     "upscale": "Upscale",
     "refresh": "Refresh",
     "r18_import": "R18 Import",
     "actor_scrape": "Actor Scrape",
-    "rescrape": "Rescrape"
+    "rescrape": "Rescrape",
+    "scan_invalid": "Scan unwanted",
+    "delete": "Delete"
   },
   "detail": {
     "status": "Status",
@@ -56,13 +57,13 @@
   },
   "report": {
     "headline": "Failure",
-    "metadata": "Metadata",
+    "metadata": "Film",
     "viewMetadata": "Open #{{id}}",
     "actor": "Actor",
     "viewActor": "Open #{{id}}",
     "loading": "Loading summary…",
-    "unavailable": "No summary available.",
-    "successEmpty": "Task completed.",
+    "unavailable": "No summary available",
+    "successEmpty": "Task completed",
     "group": {
       "failed": "Failed",
       "ok": "Succeeded",
@@ -73,6 +74,7 @@
     },
     "reason": {
       "http_error": "Request rejected by the site",
+      "api_error": "Upstream API error",
       "not_found": "Content not found on the site",
       "rate_limited": "Rate limited",
       "server_error": "Site server error",
@@ -130,12 +132,13 @@
   },
   "batchScrape": {
     "toggle": "Batch Scrape",
-    "templateLabel": "Liquid Template",
+    "templateLabel": "Template",
     "previewLabel": "Preview",
     "previewEmpty": "Enter a template to see preview",
     "submit": "Submit {{count}} task(s)",
     "submit_one": "Submit {{count}} task",
-    "submit_other": "Submit {{count}} tasks"
+    "submit_other": "Submit {{count}} tasks",
+    "templateDescription": "Write numbers in Liquid syntax; loops and filters are supported"
   },
   "submit": {
     "toggle": "Submit Task",
@@ -143,26 +146,28 @@
     "types": {
       "scrape": "Scrape",
       "organize": "Organize",
-      "trash": "Trash",
       "cleanup": "Cleanup",
       "upscale": "Upscale",
       "refresh": "Refresh",
       "r18_import": "R18 Import",
       "actor_scrape": "Actor Scrape",
-      "rescrape": "Rescrape"
+      "rescrape": "Rescrape",
+      "scan_invalid": "Scan unwanted",
+      "delete": "Delete"
     },
     "cleanup": {
       "remove_missing_files": {
         "label": "Remove Missing Files"
       },
       "remove_unreferenced_resources": {
-        "label": "Remove Unreferenced Resources"
+        "label": "Remove unreferenced resources",
+        "description": "Delete resource files that no film references"
       }
     },
     "organize": {
       "library_id": {
         "label": "Library",
-        "description": ""
+        "description": "Files under this library are organized"
       },
       "path": {
         "label": "Path",
@@ -201,24 +206,10 @@
             "trailer": "Trailer"
           }
         }
-      }
-    },
-    "trash": {
-      "library_id": {
-        "label": "Library",
-        "description": ""
       },
-      "recursive": {
-        "label": "Recursive",
-        "description": "Overrides library setting"
-      },
-      "patterns": {
-        "label": "Patterns",
-        "description": "Overrides library setting"
-      },
-      "path": {
-        "label": "Path",
-        "description": "Trash only a subdirectory of the library"
+      "prune_empty_dirs": {
+        "label": "Prune emptied directories",
+        "description": "Removes directories emptied by this run; no effect on copy / hardlink / symbolic link"
       }
     },
     "scrape": {
@@ -226,7 +217,7 @@
         "label": "Number"
       },
       "media_id": {
-        "label": "Media ID",
+        "label": "File ID",
         "description": "Not needed for manual scrape"
       },
       "content_type": {
@@ -257,21 +248,21 @@
     "upscale": {
       "max_dim_threshold": {
         "label": "Max Dimension Threshold",
-        "description": "Only upscale images whose longest side is below this value."
+        "description": "Only upscale images whose longest side is below this value"
       },
       "max_bytes_threshold": {
         "label": "Max File Size Threshold (bytes)",
-        "description": "Files larger than this skip upscaling (treated as sharp enough)."
+        "description": "Files larger than this skip upscaling (treated as sharp enough)"
       },
       "limit": {
         "label": "Limit",
-        "description": "Maximum number of images to upscale."
+        "description": "Maximum number of images to upscale"
       }
     },
     "refresh": {
       "library_id": {
         "label": "Library",
-        "description": ""
+        "description": "Scan this library"
       },
       "recursive": {
         "label": "Recursive",
@@ -289,8 +280,8 @@
         "label": "Scan Mode",
         "$": {
           "options": {
-            "add": "Add New Files",
-            "remove": "Remove Missing"
+            "add": "Scan for new files",
+            "remove": "Remove dead entries"
           }
         }
       },
@@ -318,13 +309,13 @@
     "r18_import": {
       "force": {
         "label": "Force Reimport",
-        "description": "Ignore the stored dump ETag and force re-download and import"
+        "description": "Ignore the stored data package version and force re-download and import"
       }
     },
     "actor_scrape": {
       "actor_id": {
         "label": "Actor ID",
-        "description": "Primary key of the Actor entity."
+        "description": "Actor ID"
       },
       "use_cache": {
         "label": "Use cache",
@@ -337,11 +328,11 @@
         }
       }
     },
-    "number": "",
+    "number": "Number",
     "rescrape": {
       "limit": {
         "label": "Limit",
-        "description": ""
+        "description": "Maximum entries per selected target in one run"
       },
       "min_age_days": {
         "label": "Min age (days)",
@@ -356,6 +347,46 @@
             "actor": "Actors"
           }
         }
+      }
+    },
+    "scan_invalid": {
+      "library_id": {
+        "label": "Library",
+        "description": "Walk unwanted files and empty folders under this library"
+      },
+      "path": {
+        "label": "Path",
+        "description": "Scan only a subdirectory of the library"
+      },
+      "recursive": {
+        "label": "Recursive",
+        "description": "Overrides library setting"
+      },
+      "patterns": {
+        "label": "Patterns",
+        "description": "Overrides library setting"
+      }
+    },
+    "delete": {
+      "library_id": {
+        "label": "Library",
+        "description": "Library the inventory belongs to"
+      },
+      "inventory_id": {
+        "label": "Inventory ID",
+        "description": "Produced by the panel; a manual value matches no inventory"
+      },
+      "exclude": {
+        "label": "Excluded",
+        "description": "Paths under the inventory's library root, matched by path component (subtree included); or absolute paths outside the library"
+      },
+      "include": {
+        "label": "Include",
+        "description": "Paths restored inside the excluded ones; the deepest match wins, ties count as included"
+      },
+      "prune_empty_dirs": {
+        "label": "Prune emptied directories",
+        "description": "Library root and .amane_trash excluded"
       }
     }
   },

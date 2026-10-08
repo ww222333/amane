@@ -18,7 +18,7 @@ import { useMutation } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createUserTagMutation, listFacetsQueryKey } from "@/client/@tanstack/react-query.gen";
+import { createUserTagsMutation, listFacetsQueryKey } from "@/client/@tanstack/react-query.gen";
 import type { FacetKind, FacetResponse, FacetSortField, SortOrder } from "@/client/types.gen";
 import { FacetRulesPanel } from "./facet-rules-panel";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
@@ -70,9 +70,14 @@ export function CatalogFacetTable({
   const [newTagName, setNewTagName] = useState("");
 
   const createMutation = useMutation({
-    ...createUserTagMutation(),
-    onSuccess: () => {
-      notifications.show({ message: t("common:toast.userTagCreated"), color: "blue" });
+    ...createUserTagsMutation(),
+    onSuccess: (res) => {
+      // 名称已存在时端点复用原行而不报错, 说「已创建」不成立
+      notifications.show({
+        message:
+          res.created > 0 ? t("common:toast.userTagCreated") : t("common:toast.userTagExists"),
+        color: "blue",
+      });
       setNewTagName("");
       identity.invalidate();
     },
@@ -115,7 +120,7 @@ export function CatalogFacetTable({
                   leftSection={<IconPlus size={14} />}
                   disabled={!newTagName.trim()}
                   loading={createMutation.isPending}
-                  onClick={() => createMutation.mutate({ body: { name: newTagName.trim() } })}
+                  onClick={() => createMutation.mutate({ body: { names: [newTagName.trim()] } })}
                 >
                   {t("common:actions.add")}
                 </Button>
@@ -188,7 +193,7 @@ export function CatalogFacetTable({
                     </HintedActionIcon>
                     <HintedActionIcon
                       variant="subtle"
-                      label={t("manage.merge", { defaultValue: "合并到此项" })}
+                      label={t("manage.merge")}
                       onClick={() => void identity.openMerge(facet.id, selected)}
                     >
                       <IconArrowMerge size={16} />
@@ -221,7 +226,7 @@ export function CatalogFacetTable({
                           leftSection={<IconArrowMerge size={14} />}
                           onClick={() => void identity.openMerge(facet.id, selected)}
                         >
-                          {t("manage.merge", { defaultValue: "合并到此项" })}
+                          {t("manage.merge")}
                         </Menu.Item>
                         <Menu.Divider />
                         <Menu.Item

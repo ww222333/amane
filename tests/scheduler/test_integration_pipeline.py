@@ -24,6 +24,7 @@ from amane.enums import SiteName
 from amane.handlers import ActorScrapePayload, RefreshHandler, RefreshPayload, ScrapeHandler, ScrapePayload
 from amane.handlers.protocol import TaskHandler, TaskResult
 from amane.parsing import ContentType
+from amane.plugins.models import SourceDescriptor, SourceTrait
 from amane.scheduler.watcher import DEBOUNCE_SECONDS, FileWatcher
 
 if TYPE_CHECKING:
@@ -90,7 +91,9 @@ class HashCrawler(Crawler):
     def profile(cls):
         from amane.crawlers.base import CrawlerProfile
 
-        return CrawlerProfile(name=SiteName.THEPORNDB, base_url="https://fake.example.com", uses_file_hash=True)
+        return CrawlerProfile(
+            name=SiteName.THEPORNDB, base_url="https://fake.example.com", traits=frozenset({SourceTrait.USES_FILE_HASH})
+        )
 
     def __init__(self, metadata: MediaMetadata):
         self._profile = self.profile()
@@ -307,7 +310,7 @@ class TestScrapeHandler:
         # 应失败因为未获取到数据
         assert result.success is False
         assert result.error is not None
-        assert "no metadata" in result.error.lower()
+        assert "元数据" in result.error
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_scrape_no_crawlers_available(self, empty_handler):
@@ -316,7 +319,7 @@ class TestScrapeHandler:
 
         assert result.success is False
         assert result.error is not None
-        assert "no crawlers" in result.error.lower()
+        assert "没有可用来源" in result.error
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_scrape_computes_oshash_for_stash_crawler(
@@ -346,6 +349,41 @@ class TestScrapeHandler:
         stored = await repo.get_media_file(media.id)
         assert stored is not None
         assert stored.oshash == "a0601fdf9f610000"
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_scrape_computes_oshash_for_external_source(
+        self, repo: Repository, resource_store, fake_metadata, tmp_path: Path
+    ):
+        """外部来源声明 uses_file_hash 时同样计算指纹, 不要求它是 Crawler 子类."""
+        video = tmp_path / "MIDV-123.mkv"
+        video.write_bytes(bytes(range(256)) * (65536 * 2 // 256))
+        media = await repo.create_media_file(library_id=1, path=str(video))
+
+        class HashFetcher:
+            """插件适配器形态: 满足 fetch 协议, 不是 Crawler 子类."""
+
+            def __init__(self) -> None:
+                self.seen_hash: str | None = None
+
+            async def fetch(self, query, options=None) -> MediaMetadata | None:
+                self.seen_hash = query.file_hash
+                return fake_metadata
+
+        fetcher = HashFetcher()
+        factory = AsyncMock(spec=CrawlerFactory)
+        factory.get_crawlers.return_value = {"acme.hash": fetcher}
+        handler = ScrapeHandler(
+            repo,
+            factory,
+            resource_store,
+            pipeline_config=HotSettings(scraping=ScrapingConfig(content_routes={ContentType.CENSORED: ["acme.hash"]})),
+            source_catalog=(SourceDescriptor(id="acme.hash", name="Acme Hash", traits=frozenset({"uses_file_hash"})),),
+        )
+        result = await handler.handle(
+            ScrapePayload(number="MIDV-123", media_file_id=media.id, content_type=ContentType.CENSORED)
+        )
+        assert result.success is True
+        assert fetcher.seen_hash == "a0601fdf9f610000"
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_scrape_skips_oshash_without_stash_crawler(self, repo: Repository, handler, tmp_path: Path):

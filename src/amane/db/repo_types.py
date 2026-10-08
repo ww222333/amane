@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, TypedDict
+from enum import StrEnum
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple, TypedDict
 
 from pydantic import BaseModel, Field, ValidationInfo, field_validator, model_validator
 from sqlalchemy import UnaryExpression, asc, desc, exists, func, or_
@@ -179,6 +180,7 @@ class ActorBrowseParams(BaseModel):
     cup_max: str | None = Field(default=None, description="罩杯上界")
     birthplace: str | None = Field(default=None, description="出生地包含匹配")
     ids: list[int] | None = Field(default=None, description="限制为这些演员主键")
+    user_tag_ids: list[int] | None = Field(default=None, description="按用户标签筛选; 多值为 AND")
     saved_query_id: int | None = Field(
         default=None, description="Saved query preset id; AND with other filters via SQL subquery"
     )
@@ -357,5 +359,39 @@ class CommentUpdates(TypedDict, total=False):
     body: str
 
 
+class SavedQueryUpdates(TypedDict, total=False):
+    """查询预设的内容字段; 类型 / 归属 / 保留态不经此更新."""
+
+    name: str
+    description: str
+    sql: str
+
+
 class UserTagUpdates(TypedDict, total=False):
     name: str
+
+
+class WriteMode(StrEnum):
+    """Metadata / Actor 字段写入策略: ``AUTO`` 供自动刮削, ``MANUAL`` 供手动与助理写入.
+
+    默认 ``AUTO``: 自动写入者漏传策略时只会未加锁, 不会误加锁.
+    语义见 docs/dev/data-model.md「字段锁定」.
+    """
+
+    AUTO = "auto"
+    MANUAL = "manual"
+
+
+type UserTagLinkAction = Literal["attach", "detach"]
+
+
+class UserTagLinkResult(NamedTuple):
+    """用户标签挂载/卸载的结果计数, 三个字段均以条目 id 为单位.
+
+    ``changed`` 为至少一处挂载关系发生变更的条目数, ``unchanged`` 为已处于目标态的条目数,
+    ``missing`` 为不存在的条目 id 数; 三者之和等于去重后的条目数.
+    """
+
+    changed: int
+    unchanged: int
+    missing: int

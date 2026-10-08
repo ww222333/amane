@@ -8,7 +8,7 @@
 `src/amane/config/manager.py` 把配置划分为两份:
 
 - **ColdSettings** (`AMANE_*` 环境变量) — 路径类、安全边界等进程级绑定. 修改后必须重启, 因为 `data_dir` 等会派生出 SQLite 路径、TOML 路径、resources 目录.
-- **HotSettings** (TOML, 经 `PATCH /api/config` 写入) — 行为参数. 多数变更经由 `AppRuntime.rebuild()`, 不重启进程.
+- **HotSettings** (TOML, 经 `PATCH /api/config` 写入) — 行为参数. 多数变更经由 `AppRuntime.apply_rebuild()`, 不重启进程.
 
 `data_dir` 不允许放入热配置: 切换目录须迁移 DB、resources 与未完成任务. 判据是 Cold = 派生路径 / 进程级绑定, Hot = 行为参数.
 
@@ -24,35 +24,39 @@ API 鉴权是冷配置: 中间件在请求路径上, 不能在进程内 rebuild 
 
 ## 进程内 rebuild
 
-`AppRuntime.rebuild()` 重建依赖 HotSettings 的对象链:
+`AppRuntime._rebuild()` 重建依赖 HotSettings 的对象链:
 
 ```
 RateLimiters → WebClient → HttpClient → CrawlerFactory
-  → Handlers (含 Translator / R18ImportHandler) → AsyncWorker
+  → Handlers → AsyncWorker
   → PlaybackFactory (独立码流客户端)
   → AgentService.rebuild (仅换 Agent 工厂 / 缓存参数)
 ```
 
 `logging.level` 在 rebuild 内直接修改 logger, 不依赖对象重建.
 
-**不重建的对象**: `Repository`、`EventBus`、`WatcherService`、`FeedService`、`ResourceStore`、`TranslationCache`、`ProxyFailureCache`、`AgentService` 内的 `ResultCache` — 它们的状态是会话级的 (DB 连接池、WS 客户端、watchdog observer、feed 轮询循环、资源去重表、译文缓存、负缓存、交付结果缓存), 重建会切断现有连接或丢掉缓存句柄. `rebuild()` 只把新 `WebClient` 交给 `FeedService.set_web_client`.
+**不重建的对象**: `Repository`、`EventBus`、`WatcherService`、`FeedService`、`ResourceStore`、`TranslationCache`、`ProxyFailureCache`、`AgentService` 内的 `ResultCache` — 它们的状态是会话级的 (DB 连接池、WS 客户端、watchdog observer、feed 轮询循环、资源去重表、译文缓存、负缓存、交付结果缓存), 重建会切断现有连接或丢弃缓存句柄. `_rebuild()` 只把新 `WebClient` 交给 `FeedService.set_web_client`.
 
 `watcher.use_polling` / `media_extensions` / `debounce_seconds` 在 `start_app` 构造时一次性注入, **不随 rebuild 更新**, 修改 TOML 后须重启; Library 级的 `automation` / `ingest` / `cloud_path` / 路径 / `trailer_pattern` 等由 libraries 路由热更新, 与这三项无关. 契约见 [watcher.md](watcher.md).
 
-旧 worker 在 rebuild 后被替换: 调用方必须排空旧 worker 再启动新的, 否则两个 worker 会同时认领任务. 新 worker 继承 pause. 配置 PATCH、插件启用 / 禁用、插件安装 / 卸载 / 重新扫描都经由 `AppRuntime.apply_rebuild()`, 串行化这段替换.
+Worker 替换不取消运行中任务: `_rebuild()` 构建新 worker 后旧 worker `retire()` (停止认领并退出主循环), 新 worker 立即开始认领; 旧 worker 的已认领任务继续运行, 清零后由后台释放其持有的 r18 句柄与浏览器池, 连续变更可同时存在多个退役 worker. 配置 PATCH、插件启用 / 禁用、插件安装 / 卸载 / 重新扫描都经由 `AppRuntime.apply_rebuild()`, 串行化这段替换. 归属以认领开始时刻为准: 变更发生时尚未结算的认领属于旧 worker, 每次退役至多带走一个旧配置任务.
 
-**r18 只读引擎**: 只在 `hot.r18` 实际变化时重建. rebuild 是同步的, 无法 await 释放 asyncpg 连接池, 旧引擎暂存 `_old_r18_db`, 由 config 路由随后 `dispose_old_r18()` 异步关闭.
+**r18 只读引擎**: 只在 `hot.r18` 实际变化时重建. 旧引擎由 `R18Handle` 标记所有权, 等使用它的退役 worker 排空且无其它 worker 引用后由后台关闭; `AppRuntime.stop_workers()` 在关闭时负责当前句柄. 契约见 [task-system.md](task-system.md).
+
+**浏览器池**: 只在 `network.browser` / `proxy` 变化时重建 (见 `src/amane/app/runtime.py::AppRuntime._rebuild`), 其余热重载复用同一实例以保留已解决的挑战会话; 被替换的旧池由 `_release_browser()` 在引用它的退役 worker 排空后关闭.
 
 ## TOML 持久化
 
 写 TOML 必须用临时文件 + `os.replace` 原子化 — 直接覆盖时写入中途进程中止会留下空文件. `tomli_w` 不接受 `None` / `set`, 持久化前须按 JSON 模式导出并剔除 `None` 与默认值.
+
+`PATCH /api/config` 的 `_deep_merge` 只合并两层: 顶层 section 及其直接子对象. 更深的嵌套对象 (如 `network.browser`) 由 patch 整体替换, 未列出的子字段回退默认值. `site_config` / `rate_limits` 等字典依赖整体替换删除 key, 不允许改为递归合并.
 
 ## 配置项增补规范
 
 字段加在 `src/amane/config/manager.py` 对应 section model (全部配置 model 集中在该文件), 然后:
 
 1. 需要 UI 展示时添加 `json_schema_extra` 的 `x-*` 扩展 (`x-*` 清单见 `web/src/components/schema-form/schema/types.ts`). 站点列表字段必须用 `site_roles` 的 schema 收窄 `items.enum`, 不允许直接暴露完整 `SiteName`.
-2. 若新字段影响限速 / HTTP / 爬虫 / LLM / handler 行为, 确认 `rebuild()` 链能传播变更; 若影响 WatcherService 构造参数, 须标明「重启生效」.
+2. 若新字段影响限速 / HTTP / 爬虫 / LLM / handler 行为, 确认 `_rebuild()` 链能传播变更; 若影响 WatcherService 构造参数, 须标明「重启生效」.
 3. `just generate` 同步前端 schema, 并补 `web/src/i18n/` 翻译, 否则构建失败.
 
 `x-frozen-keys` 全量 dict (`site_config` / `content_routes` / `field_language`): `default_factory` 只在整段缺席时生效; 文件里已有该字段但缺 key 时, 校验按代码枚举补默认并丢弃未知 key. UI 不能加 key, 不补则新项无法配置. `GET /api/config` 始终返回全集.
@@ -69,9 +73,9 @@ RateLimiters → WebClient → HttpClient → CrawlerFactory
 
 `prefixes` 是该类型的自定义番号前缀. 刮削时若番号命中某类型前缀, 覆盖 payload 的 `content_type` 并采用该类型 `sites` (多命中取最长前缀; 边界规则见 `match_content_type_prefix`).
 
-`field_priority` 是稀疏字段例外: 只写需要提前尝试的站; 编译时与该类型路由求交后前置, 其余路由站点保序回退. `field_blacklist` 是稀疏字段排除: 只写该字段不采用的站. 二者同时列出同一站时以黑名单为准. 不在该类型路由中的站无效, 也不额外发请求.
+`field_priority` 是稀疏字段例外: 只写需要提前尝试的站; 编译时与该类型路由求交后前置, 其余路由站点保序回退. `field_blacklist` 是稀疏字段排除: 只写该字段不采用的站. 二者同时列出同一站时以字段排除为准. 不在该类型路由中的站无效, 也不额外发请求. 取值顺序与空值回退见 [task-system.md](task-system.md).
 
-外部影片来源的 descriptor 参与路由校验: 声明 `content_types` 时路由类型必须在声明集合内, 声明 `metadata_fields` 时字段优先级与黑名单只能选择声明过的字段; `multi_language` 参与聚合节点展开.
+外部影片来源的 descriptor 参与路由校验: 声明 `content_types` 时路由类型必须在声明集合内, 声明 `metadata_fields` 时字段优先级与字段排除只能选择声明过的字段; `traits` 决定来源的多语言节点展开与聚合分段.
 
 建图对编译后站点链的消费见 [task-system.md](task-system.md), 默认表取舍见 [content-routes.md](content-routes.md).
 
@@ -79,7 +83,7 @@ RateLimiters → WebClient → HttpClient → CrawlerFactory
 
 演员刮削与影片 `scraping` 分 section: 影片管线不读演员站列表, 演员任务也不读 `field_priority` / `field_blacklist`. 契约 (实现见 `ActorScrapeHandler` / `aggregate.actor`):
 
-- **`profile_sites`** / **`image_sites`**: 档案与头像的来源顺序 (标量填空优先级, 头像优先于档案站附图). 默认与 schema 枚举都是注册表里声明了对应能力的插入序, 不在配置层手写站点名单.
+- **`profile_sites`** / **`image_sites`**: 资料来源与头像来源的顺序 (单源字段填空优先级, 头像优先于资料来源附图). 默认与 schema 枚举都是注册表里声明了对应能力的插入序, 不在配置层手写站点名单.
 - **`download_images`**: 是否经 ResourceStore 缓存头像 (URL 仍为远端 locator).
 - **`auto_scrape`**: 影片刮削成功后自动链式入队该片演员的 `ACTOR_SCRAPE` 任务; 见 [task-system.md](task-system.md).
 - **`gfriends_repo`**: gFriends 仓库 URL, Filetree 缓存在 `data_dir`.
@@ -88,4 +92,4 @@ RateLimiters → WebClient → HttpClient → CrawlerFactory
 
 ## `watermark` (Hot)
 
-只在 ORGANIZE 落盘封面时绘制, 不修改 Resource; 片库 CSS overlay 不读 `enabled`. 角标高度 = 图高 × `scale` (不按宽、不按 PNG 原图像素); `corners` 是 `x-frozen-keys` 五类到四角的映射, 同角按中字 / 无码 / 破解 / 流出 / 清晰度向内叠. PNG 覆盖仍是 `{data_dir}/watermarks/{stem}.png`.
+只在 ORGANIZE 落盘封面时绘制, 不修改 Resource; 片库 CSS overlay 不读 `enabled`. 角标高度 = 图高 × `scale` (不按宽、不按 PNG 原图像素); `corners` 是 `x-frozen-keys` 五类到四角的映射, 同角按中字 / 无码 / 破解 / 流出 / 分辨率向内叠. PNG 覆盖仍是 `{data_dir}/watermarks/{stem}.png`.

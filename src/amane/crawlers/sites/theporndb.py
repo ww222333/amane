@@ -1,6 +1,9 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, override
 
 from ...enums import ActorGender, SiteName
+from ...net.connectivity import ConnectivityOutcome, SkipReason, assess_response
+from ...net.errors import FailureReason, RequestError
+from ...plugins.models import SourceTrait
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, FilmActor, MediaMetadata, SearchQuery
 
@@ -60,7 +63,48 @@ class ThePornDBCrawler(Crawler):
 
     @classmethod
     def profile(cls) -> CrawlerProfile:
-        return CrawlerProfile(name=SiteName.THEPORNDB, base_url="https://theporndb.net/graphql", uses_file_hash=True)
+        return CrawlerProfile(
+            name=SiteName.THEPORNDB,
+            base_url="https://theporndb.net/graphql",
+            traits=frozenset({SourceTrait.USES_FILE_HASH}),
+        )
+
+    @override
+    async def check_connectivity(self) -> ConnectivityOutcome:
+        """真发一次 GraphQL 请求: 本源只有带 token 才会请求, 探测必须同样验证凭据与连通性.
+
+        查一个不存在的 id: 应答便宜, 且能区分「token 被拒」与「站点不可达」. 地址经 ``_gql_url``
+        取: ``?type=`` 是每次请求的过滤条件, 探测验证的是可达性与凭据, 不加该条件.
+        """
+        token = self.config.api_token if self.config else None
+        if not token:
+            return ConnectivityOutcome.skipped(SkipReason.MISSING_CREDENTIAL, "api_token")
+        url = self._gql_url(None)
+        try:
+            resp = await self.client.web_client.request(
+                "POST",
+                url,
+                json={"query": _FIND_BY_ID_QUERY, "variables": {"id": "0"}},
+                headers={"Authorization": f"Bearer {token}"},
+                max_attempts=1,
+            )
+        except RequestError as exc:
+            return ConnectivityOutcome.failed(exc.reason, url=url, http_status=exc.http_status)
+
+        try:
+            payload = resp.json()
+        except Exception:
+            payload = None
+        if isinstance(payload, dict) and payload.get("errors") and not payload.get("data"):
+            # HTTP 状态正常而在 GraphQL 层失败: 原因不写在状态码上. 上游的错误文本是英文原文, 截断后作为
+            # 可行动信息报给用户 (不含 Authorization 头), 完整应答写入日志.
+            errors = payload["errors"]
+            self.logger.warning("theporndb graphql errors", errors=errors)
+            message = ""
+            if isinstance(errors, list) and errors and isinstance(errors[0], dict):
+                message = str(errors[0].get("message") or "")
+            return ConnectivityOutcome.failed(FailureReason.API_ERROR, url=url, detail=message[:200] or None)
+        return assess_response(url, resp)
 
     async def fetch(self, query: SearchQuery, options: FetchOptions | None = None) -> MediaMetadata | None:
         token = self.config.api_token if self.config else None

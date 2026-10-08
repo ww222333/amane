@@ -5,11 +5,16 @@ import { createFileRoute, stripSearchParams } from "@tanstack/react-router";
 import type { ParseKeys } from "i18next";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { listActorsInfiniteOptions, listActorsOptions } from "@/client/@tanstack/react-query.gen";
+import {
+  getFacetOptions,
+  listActorsInfiniteOptions,
+  listActorsOptions,
+} from "@/client/@tanstack/react-query.gen";
 import type { ActorGender, ActorSortField } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { InfiniteScrollSentinel } from "@/components/common/infinite-scroll-sentinel";
+import { ListDefaultActions } from "@/components/common/list-default-actions";
 import { PageSizeSelect } from "@/components/common/page-size-select";
 import { SortMenu } from "@/components/common/sort-menu";
 import { ActorFilterControls } from "@/components/media/actor-filter-controls";
@@ -36,6 +41,7 @@ import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { exhaustiveRecord } from "@/lib/exhaustive";
 import { ACTOR_SORT_FIELDS } from "@/lib/exhaustive-maps";
 import { nextOffsetPageParam } from "@/lib/infinite-list";
+import { actorListDefaults } from "@/lib/nav-defaults";
 import { useUIStore } from "@/stores/ui";
 
 const ACTOR_SORT_I18N_KEY = exhaustiveRecord<ActorSortField>()({
@@ -87,10 +93,19 @@ function ActiveFilterChip({ label, onClear }: { label: string; onClear: () => vo
   );
 }
 
+/** 标签名经单条分类查询, 与片库的芯片同形. */
+function ActiveUserTagChip({ tagId, onClear }: { tagId: number; onClear: () => void }) {
+  const { t } = useTranslation("metadata");
+  const { data } = useQuery(getFacetOptions({ path: { kind: "user_tag", facet_id: tagId } }));
+  return (
+    <ActiveFilterChip label={`${t("detail.userTags")}: ${data?.name ?? tagId}`} onClear={onClear} />
+  );
+}
+
 function ActorsIndexPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
-  const { t } = useTranslation(["metadata", "common", "agent"]);
+  const { t } = useTranslation(["metadata", "common", "savedQueries"]);
   const listLimit = useUIStore((s) => s.pageSizes.actorsList);
 
   const filters = actorFilterValuesFromSearch(search);
@@ -189,6 +204,7 @@ function ActorsIndexPage() {
     <BrowsePageShell
       fill={isList}
       title={<Title order={2}>{t("actors.title")}</Title>}
+      actions={<ListDefaultActions update={{ key: "actors", value: actorListDefaults(search) }} />}
       viewSwitch={
         <SegmentedControl
           value={search.view}
@@ -279,7 +295,7 @@ function ActorsIndexPage() {
           {search.saved_query_id != null && (
             <Group gap={4} wrap="nowrap">
               <ActiveFilterChip
-                label={`${t("common:nav.agent")}: #${search.saved_query_id}`}
+                label={`${t("common:nav.savedQueries")}: #${search.saved_query_id}`}
                 onClear={() =>
                   void navigate({
                     search: (prev) => ({ ...prev, saved_query_id: undefined, page: 1 }),
@@ -293,7 +309,7 @@ function ActorsIndexPage() {
                 href={`/saved-queries/${search.saved_query_id}`}
                 target="_blank"
                 rel="noreferrer"
-                aria-label={t("agent:openData")}
+                aria-label={t("savedQueries:openData")}
               >
                 <IconTable size={14} />
               </ActionIcon>
@@ -322,6 +338,12 @@ function ActorsIndexPage() {
             <ActiveFilterChip
               label={`${t("browse.person.birthplace")}: ${filters.birthplace}`}
               onClear={() => clearFilterKeys(["birthplace"])}
+            />
+          )}
+          {filters.user_tag_id != null && (
+            <ActiveUserTagChip
+              tagId={filters.user_tag_id}
+              onClear={() => applyFilterPatch({ user_tag_id: undefined })}
             />
           )}
           {filters.has_person != null && (

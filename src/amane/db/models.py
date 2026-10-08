@@ -33,13 +33,14 @@ class MediaFileStatus(StrEnum):
 class TaskType(StrEnum):
     SCRAPE = "scrape"
     ORGANIZE = "organize"
-    TRASH = "trash"
     REFRESH = "refresh"
     CLEANUP = "cleanup"
     UPSCALE = "upscale"
     R18_IMPORT = "r18_import"
     ACTOR_SCRAPE = "actor_scrape"
     RESCRAPE = "rescrape"
+    SCAN_INVALID = "scan_invalid"
+    DELETE = "delete"
 
 
 class RoutineType(StrEnum):
@@ -190,6 +191,7 @@ class Metadata(SQLModel, table=True):
     runtime: int | None = None
     tags: list[str] = Field(default_factory=list, sa_column=Column(JSON))
     series: str | None = Field(default=None, index=True)
+    # 长文本存纯文本, 上游 HTML/实体在入库前经 utils.text 归一, 见 docs/dev/data-model.md.
     plot: str | None = None
     directors: list[str] = Field(default_factory=list, sa_column=Column(JSON))
 
@@ -206,6 +208,10 @@ class Metadata(SQLModel, table=True):
     field_sources: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSON))
     # 各站原始快照, 供离线重新聚合.
     raw: dict[str, dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON))
+    # 字段级锁定; 契约见 docs/dev/data-model.md.
+    locked_fields: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'"))
+    )
 
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
@@ -288,9 +294,9 @@ class Library(SQLModel, table=True):
     move_mode: MoveMode = Field(default=MoveMode.MOVE)
     video_template: PathTemplate = Field(default=VIDEO_TEMPLATE_DEFAULT)
     link_template: PathTemplate | None = None
-    """空则不创建链接. 非空时 ORGANIZE 在视频就位后按此模板写 strm 或软链接, 必须在库外."""
+    """空则不创建链接. 非空时 ORGANIZE 在视频就位后按此模板写 strm 或符号链接, 必须在库外."""
     link_mode: LinkMode = Field(default=LinkMode.STRM)
-    """link_template 非空时: strm 写 .strm 文本; symlink 做文件系统软链接."""
+    """link_template 非空时: strm 写 .strm 文本; symlink 做文件系统符号链接."""
     strm_content_template: StrmContentTemplate | None = None
     """仅 link_mode=strm: .strm 正文模板. 空则写视频绝对路径. 占位符与路径模板相同."""
     thumb_template: PathTemplate | None = None
@@ -320,9 +326,9 @@ class Library(SQLModel, table=True):
     trailer_pattern: TrailerPattern = Field(default=DEFAULT_TRAILER_PATTERN, sa_column=Column(String, nullable=False))
     """匹配文件名 (含扩展名) 的正则; 命中则扫描/监控跳过. 空串关闭."""
     blacklist_patterns: list[BlacklistPattern] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
-    """文件名正则列表, 命中任一则扫描/监控跳过, 且 TRASH 时移入本库 `.amane_trash`. 空列表关闭."""
+    """文件名正则列表, 命中任一则扫描/监控跳过, 并作为无效文件进入清理清单. 空列表关闭."""
     min_file_size: MinFileSize = Field(default=0)
-    """视频体积下限 (字节). 小于此值的扫描视频在 REFRESH/监控跳过, TRASH 时进 `.amane_trash`. 0 关闭.
+    """最小视频大小 (字节). 小于此值的扫描视频在 REFRESH/监控跳过, 并作为无效文件进入清理清单. 0 关闭.
 
     只对扫描视频扩展名生效 (与 watcher.media_extensions / MEDIA_EXTENSIONS 同一套);
     图片、NFO、字幕、`.strm` 指针都不参与.
@@ -449,6 +455,10 @@ class Actor(SQLModel, table=True):
     source_urls: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSON))
     field_sources: dict[str, str] = Field(default_factory=dict, sa_column=Column(JSON))
     raw: dict[str, dict[str, Any]] = Field(default_factory=dict, sa_column=Column(JSON))
+    # 人物字段级锁定; 契约见 docs/dev/data-model.md.
+    locked_fields: list[str] = Field(
+        default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'"))
+    )
 
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
@@ -579,6 +589,15 @@ class MetadataUserTag(SQLModel, table=True):
     user_tag_id: int = Field(foreign_key="user_tags.id", primary_key=True, ondelete="CASCADE")
 
 
+class ActorUserTag(SQLModel, table=True):
+    """演员与用户标签的挂载关系; 与 ``MetadataUserTag`` 同形, 不保序."""
+
+    __tablename__ = "actor_user_tags"  # type: ignore[assignment]
+
+    actor_id: int = Field(foreign_key="actors.id", primary_key=True, ondelete="CASCADE")
+    user_tag_id: int = Field(foreign_key="user_tags.id", primary_key=True, ondelete="CASCADE")
+
+
 class Comment(SQLModel, table=True):
     """``updated_at`` 晚于 ``created_at`` 表示正文被编辑过; 未编辑时两列相等."""
 
@@ -605,13 +624,17 @@ class SavedQueryEntity(StrEnum):
     DATA = "data"
 
 
+DEFAULT_SESSION_TITLE = "新会话"
+"""会话标题默认值; 建表、创建请求与标题生成失败的回退共用."""
+
+
 class AgentSession(SQLModel, table=True):
     """会话索引; 完整 trace 落盘, 不在本表."""
 
     __tablename__ = "agent_sessions"  # type: ignore[assignment]
 
     id: int | None = Field(default=None, primary_key=True)
-    title: str = Field(default="新会话", nullable=False)
+    title: str = Field(default=DEFAULT_SESSION_TITLE, nullable=False)
     status: AgentSessionStatus = Field(default=AgentSessionStatus.ACTIVE, index=True)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
@@ -624,6 +647,7 @@ class SavedQuery(SQLModel, table=True):
 
     id: int | None = Field(default=None, primary_key=True)
     name: str = Field(nullable=False)
+    description: str = Field(default="", nullable=False)
     sql: str = Field(nullable=False)
     entity: SavedQueryEntity = Field(index=True)
     session_id: int | None = Field(default=None, foreign_key="agent_sessions.id", index=True)

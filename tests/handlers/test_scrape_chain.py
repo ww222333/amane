@@ -141,7 +141,7 @@ async def test_scrape_no_chain_without_actors(repo: Repository, tmp_path: Path):
 
 @pytest.mark.asyncio(loop_scope="function")
 async def test_chain_failure_does_not_fail_scrape(repo: Repository, tmp_path: Path, monkeypatch):
-    """链式描述异常被吞掉, 不阻断刮削主流程 (机会主义)."""
+    """链式描述异常被忽略, 不阻断刮削主流程 (失败即跳过)."""
 
     async def _boom(names):
         raise RuntimeError("enqueue boom")
@@ -197,4 +197,6 @@ async def test_second_scrape_reuses_active_actor_task(repo: Repository, tmp_path
 
     tasks = await _list_actor_tasks(repo)
     assert len(tasks) == 1
-    await worker.stop()
+    worker.retire()
+    await worker.wait_stopped()
+    await worker.shutdown_active()

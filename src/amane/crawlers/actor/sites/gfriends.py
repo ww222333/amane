@@ -5,10 +5,11 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, override
 from urllib.parse import quote, urlsplit
 
 from amane.enums import ActorGender, SiteName
+from amane.net.connectivity import ConnectivityOutcome, probe_get
 from amane.plugins.models import SourceCapability
 
 from ...base import CrawlerProfile
@@ -57,6 +58,14 @@ class GFriendsActorCrawler(ActorCrawler):
             content_path=hit.path,
         )
 
+    @override
+    async def check_connectivity(self) -> ConnectivityOutcome:
+        """真实入口是仓库根下的 ``Filetree.json``: 仓库目录本身 404, 探测 ``base_url`` 会假报不可达."""
+        return await probe_get(self.client.web_client, self._tree_url(), cookies=self.cookies, headers=self.headers)
+
+    def _tree_url(self) -> str:
+        return f"{self._raw_base()}/Filetree.json"
+
     async def _search(self, name: str) -> str | None:
         raise NotImplementedError
 
@@ -80,7 +89,7 @@ class GFriendsActorCrawler(ActorCrawler):
                 self.logger.warning("gfriends cache unreadable", path=str(cache))
 
         # 拉取 Filetree 并写缓存.
-        tree_url = f"{self._raw_base()}/Filetree.json"
+        tree_url = self._tree_url()
         data = await self.client.get_json(tree_url, cookies=self.cookies)
         if not isinstance(data, dict):
             self._index = {}

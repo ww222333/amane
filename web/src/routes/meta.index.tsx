@@ -4,7 +4,6 @@ import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { createFileRoute, stripSearchParams } from "@tanstack/react-router";
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { z } from "zod";
 import {
   getFacetOptions,
   listMetadataInfiniteOptions,
@@ -14,6 +13,7 @@ import type { FacetKind, MetadataSortField } from "@/client/types.gen";
 import { BrowsePageShell } from "@/components/common/browse-page-shell";
 import { HintedActionIcon } from "@/components/common/hinted-action-icon";
 import { InfiniteScrollSentinel } from "@/components/common/infinite-scroll-sentinel";
+import { ListDefaultActions } from "@/components/common/list-default-actions";
 import { PageSizeSelect } from "@/components/common/page-size-select";
 import { SortMenu } from "@/components/common/sort-menu";
 import { FacetBadge } from "@/components/media/facet-badge";
@@ -24,75 +24,20 @@ import {
 } from "@/components/media/facet-filter-controls";
 import { MetaTable } from "@/components/media/meta-table";
 import { PosterGrid } from "@/components/media/poster-grid";
-import {
-  CONTENT_TYPES,
-  FILE_DEFINITIONS,
-  METADATA_SORT_FIELDS,
-  MOSAICS,
-  SORT_ORDERS,
-} from "@/lib/exhaustive-maps";
-import {
-  activeFacetFilters,
-  addFacetId,
-  coerceIdList,
-  type FacetFilters,
-  removeFacetId,
-} from "@/lib/facets";
+import { activeFacetFilters, addFacetId, type FacetFilters, removeFacetId } from "@/lib/facets";
 import { useNarrowViewport } from "@/hooks/use-narrow-viewport";
 import { nextOffsetPageParam } from "@/lib/infinite-list";
+import { metaSearchSchema, METADATA_SORT_OPTIONS } from "@/lib/media/browse";
+import { metaListDefaults } from "@/lib/nav-defaults";
 import { useUIStore } from "@/stores/ui";
 
 const CHUNK = 30;
-
-const SORT_FIELDS = [
-  "updated_at",
-  "created_at",
-  "number",
-  "title",
-  "studio",
-  "release",
-  "file_count",
-] as const satisfies readonly MetadataSortField[];
-
-const idListSchema = z.preprocess(coerceIdList, z.array(z.number().int().positive()).optional());
-
-const metaSearchSchema = z.object({
-  q: z.string().optional(),
-  view: z.enum(["grid", "list"]).catch("grid").default("grid"),
-  sort_by: z.enum(METADATA_SORT_FIELDS).optional(),
-  order: z.enum(SORT_ORDERS).optional(),
-  page: z.coerce.number().int().min(1).catch(1).default(1),
-  actor_id: idListSchema,
-  director_id: idListSchema,
-  tag_id: idListSchema,
-  studio_id: idListSchema,
-  publisher_id: idListSchema,
-  series_id: idListSchema,
-  user_tag_id: idListSchema,
-  has_files: z.enum(["true", "false"]).optional(),
-  has_subtitle: z.enum(["true", "false"]).optional(),
-  uncensored: z.enum(["true", "false"]).optional(),
-  mosaic: z.enum(MOSAICS).optional(),
-  definition: z.enum(FILE_DEFINITIONS).optional(),
-  content_type: z.enum(CONTENT_TYPES).optional(),
-  saved_query_id: z.coerce.number().int().positive().optional(),
-});
 
 export const Route = createFileRoute("/meta/")({
   validateSearch: metaSearchSchema,
   search: { middlewares: [stripSearchParams({ view: "grid", page: 1 })] },
   component: MetaIndexPage,
 });
-
-const SORT_FIELD_COLUMN_KEY = {
-  updated_at: "updated",
-  created_at: "created",
-  number: "number",
-  title: "title",
-  studio: "studio",
-  release: "release",
-  file_count: "fileCount",
-} as const satisfies Record<MetadataSortField, string>;
 
 function parseHasFiles(value: "true" | "false" | undefined): HasFilesFilter {
   if (value === "true") return true;
@@ -154,7 +99,7 @@ function ActiveTriChip({ label, onClear }: { label: string; onClear: () => void 
 }
 
 function MetaIndexPage() {
-  const { t } = useTranslation(["metadata", "common", "agent"]);
+  const { t } = useTranslation(["metadata", "common", "savedQueries"]);
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const listLimit = useUIStore((s) => s.pageSizes.metaList);
@@ -330,6 +275,7 @@ function MetaIndexPage() {
     <BrowsePageShell
       fill={isList}
       title={<Title order={2}>{t("common:nav.meta")}</Title>}
+      actions={<ListDefaultActions update={{ key: "meta", value: metaListDefaults(search) }} />}
       viewSwitch={
         <SegmentedControl
           value={search.view}
@@ -377,9 +323,9 @@ function MetaIndexPage() {
           )}
           {!isList && (
             <SortMenu
-              options={SORT_FIELDS.map((f) => ({
-                value: f,
-                label: t(`columns.${SORT_FIELD_COLUMN_KEY[f]}`),
+              options={METADATA_SORT_OPTIONS.map((option) => ({
+                value: option.value,
+                label: t(option.labelKey),
               }))}
               sortBy={search.sort_by}
               order={search.order}
@@ -417,7 +363,7 @@ function MetaIndexPage() {
           {search.saved_query_id != null && (
             <Group gap={4} wrap="nowrap">
               <Badge variant="outline">
-                {t("common:nav.agent")}: #{search.saved_query_id}
+                {t("common:nav.savedQueries")}: #{search.saved_query_id}
               </Badge>
               <ActionIcon
                 size="sm"
@@ -426,7 +372,7 @@ function MetaIndexPage() {
                 href={`/saved-queries/${search.saved_query_id}`}
                 target="_blank"
                 rel="noreferrer"
-                aria-label={t("agent:openData")}
+                aria-label={t("savedQueries:openData")}
               >
                 <IconTable size={14} />
               </ActionIcon>

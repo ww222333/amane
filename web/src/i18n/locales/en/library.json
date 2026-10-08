@@ -3,7 +3,7 @@
   "searchPlaceholder": "Search by path or number...",
   "deleteLibrary": {
     "confirmTitle": "Delete Library",
-    "confirmDescEmpty": "This permanently deletes the library \"{{name}}\". This action cannot be undone.",
+    "confirmDescEmpty": "This permanently deletes the library \"{{name}}\". This action cannot be undone",
     "tooltip": "Delete this library"
   },
   "scan": {
@@ -20,14 +20,14 @@
     }
   },
   "organize": {
-    "tooltip": "Trash invalid files then organize"
+    "tooltip": "Organize"
   },
   "columns": {
     "number": "Number",
     "path": "Path",
     "status": "Status",
     "size": "Size",
-    "metadata": "Metadata",
+    "metadata": "Film",
     "updated": "Updated",
     "actions": "Actions"
   },
@@ -42,7 +42,7 @@
     "number": "Number",
     "numberPlaceholder": "e.g. MIDV-123",
     "contentType": "Content type",
-    "contentTypeHint": "Leave empty to infer from the number you enter.",
+    "contentTypeHint": "Leave empty to infer from the number you enter",
     "contentTypeAuto": "Infer automatically",
     "submit": "Start scrape",
     "contentTypes": {
@@ -58,13 +58,13 @@
   },
   "batch": {
     "confirmDeleteTitle": "Delete Media Files",
-    "confirmDeleteDesc": "Are you sure you want to delete {{count}} selected media files? This action cannot be undone.",
-    "confirmDeleteDesc_one": "Are you sure you want to delete {{count}} selected media file? This action cannot be undone.",
-    "confirmDeleteDesc_other": "Are you sure you want to delete {{count}} selected media files? This action cannot be undone."
+    "confirmDeleteDesc": "Are you sure you want to delete {{count}} selected media files? This action cannot be undone",
+    "confirmDeleteDesc_one": "Are you sure you want to delete {{count}} selected media file? This action cannot be undone",
+    "confirmDeleteDesc_other": "Are you sure you want to delete {{count}} selected media files? This action cannot be undone"
   },
   "detail": {
     "confirmDeleteTitle": "Delete Media File",
-    "confirmDeleteDesc": "Are you sure you want to delete this media file? This action cannot be undone."
+    "confirmDeleteDesc": "Are you sure you want to delete this media file? This action cannot be undone"
   },
   "filters": {
     "title": "Filter by status",
@@ -83,12 +83,12 @@
     "label": "Automation",
     "hint": "Watching and auto-scrape; organize stays manual",
     "none": "Off",
-    "watch": "Ingest only",
-    "scrape": "Ingest and scrape"
+    "watch": "Watch only",
+    "scrape": "Watch and scrape"
   },
   "ingest": {
-    "label": "File watching",
-    "hint": "Webhook requires a CloudDrive2 membership; better than watching the mount",
+    "label": "File discovery",
+    "hint": "Webhook requires a CloudDrive2 membership; performs better than watching the mount path",
     "native": "Local files",
     "clouddrive": "CD2 webhook",
     "cloudPath": "CloudDrive path",
@@ -102,16 +102,16 @@
   "placeholder": "/path/to/media/directory",
   "fieldRecursive": "Recursive",
   "fieldPatterns": "Patterns",
-  "fieldPatternsHint": "Comma-separated globs, e.g. *.mp4,*.mkv",
+  "fieldPatternsHint": "Comma-separated wildcards, e.g. *.mp4,*.mkv",
   "fieldTrailerPattern": "Trailer filename regex",
   "fieldTrailerPatternHint": "Matches are treated as trailers and skipped during scan and watch",
-  "fieldBlacklistPatterns": "Blacklist regexes",
-  "fieldBlacklistPatternsHint": "One regex per line; matches are treated as junk, skipped during scan, moved to .amane_trash by the Trash task",
+  "fieldBlacklistPatterns": "File blacklist regexes",
+  "fieldBlacklistPatternsHint": "One regex per line; matches are treated as unwanted files and listed as cleanup candidates",
   "fieldMinFileSize": "Minimum video size",
-  "fieldMinFileSizeHint": "Videos smaller than this are treated as junk and moved to .amane_trash by the Trash task",
+  "fieldMinFileSizeHint": "Videos smaller than this are treated as unwanted files and listed as cleanup candidates",
   "fieldSubtitleExtensions": "Subtitle extensions",
   "fieldSubtitleExtensionsHint": "Comma-separated",
-  "fieldMoveMode": "File Operation Mode",
+  "fieldMoveMode": "Organize Mode",
   "fieldWriteNfo": "Write NFO",
   "fieldTrashEmptySource": "Trash folders with no videos on organize",
   "fieldTrashEmptySourceHint": "After organize, scan the whole library; move folders with no videos into .amane_trash (skips library root, trash, and the scrape failure output directory)",
@@ -123,7 +123,7 @@
   "fieldExcludeFailDir": "Exclude scrape failure directory",
   "fieldExcludeFailDirHint": "Skip this directory in scan, watch, and organize prune so scrape will not re-queue it",
   "fieldCopyResources": "Copy on organize",
-  "fieldCopyResourcesHint": "",
+  "fieldCopyResourcesHint": "Copy downloaded resources to the library path when organizing",
   "copyResource": {
     "thumb": "Cover",
     "poster": "Poster",
@@ -139,12 +139,12 @@
   "fieldVideoTemplate": "Video Path Template",
   "fieldVideoTemplateHint": "Relative or absolute path; see placeholder badges below",
   "fieldLinkTemplate": "Link Path Template",
-  "fieldLinkTemplateHint": "Organize creates a strm/symlink here. Must be an absolute path outside the library",
+  "fieldLinkTemplateHint": "Organize creates an STRM file or symbolic link here. Must be an absolute path outside the library",
   "fieldLinkTemplatePlaceholder": "e.g. /local/emby/{studio}/{number}/{number}.{ext}",
   "fieldLinkMode": "Link Mode",
   "linkMode": {
     "strm": "STRM file",
-    "symlink": "Symlink"
+    "symlink": "Symbolic Link"
   },
   "fieldStrmContentTemplate": "STRM content template",
   "fieldStrmContentTemplateHint": "Applies when the link mode is STRM. Default writes the video file absolute path",
@@ -154,7 +154,7 @@
   "optionalTemplateDefault": "Default: {{default}}",
   "placeholders": {
     "label": "Placeholders",
-    "hint": "Click to copy.",
+    "hint": "Click to copy",
     "docs": "See the documentation",
     "copied": "Copied {{placeholder}} to clipboard",
     "copyFailed": "Copy failed, please copy manually",
@@ -190,12 +190,76 @@
     }
   },
   "tpl": {
-    "thumb": "Thumbnail Template",
+    "thumb": "Cover Template",
     "poster": "Poster Template",
     "fanart": "Fanart Template",
     "extrafanart": "Extrafanart Template",
     "nfo": "NFO Template",
     "trailer": "Trailer Template",
     "subtitle": "Subtitle Template"
+  },
+  "cleanup": {
+    "tooltip": "Clean up unwanted files, leftover folders and empty folders",
+    "title": "Cleanup",
+    "scan": "Start scan",
+    "rescan": "Rescan",
+    "scanStarted": "Scan started",
+    "deleteStarted": "Deletion started",
+    "scope": "This inventory covers {{path}} only",
+    "truncated": "Too many files; only part of the results are included",
+    "truncatedMore": "{{count}} more items are not included",
+    "skipped": "{{dirs}} folders and {{files}} files were not covered",
+    "selected": "{{count}} selected, about {{size}}",
+    "empty": "Nothing to clean",
+    "expandAll": "Expand all",
+    "collapseAll": "Collapse all",
+    "willBeEmpty": "Will be emptied",
+    "hardlink": "Hard link",
+    "hardlinkHint": "Deleting frees no extra space",
+    "nodeCount": "{{count}} items",
+    "confirmTitle": "Confirm deletion",
+    "confirmMessage": "{{count}} items, about {{size}}, will be deleted. This cannot be undone; index rows go with them.",
+    "confirmLabel": "Delete",
+    "deleteSelected": "Delete selected",
+    "reason": {
+      "blacklist": "File blacklist",
+      "undersized": "Too small",
+      "empty_dir": "Empty folder",
+      "explicit": "Selected",
+      "orphan": "Leftover folder"
+    },
+    "notice": {
+      "missing": "No longer on disk: {{path}}",
+      "outside_root": "Outside the library root; save the library path again: {{path}}",
+      "work_dir_is_root": "This folder is the library root; deleting it is not offered",
+      "work_dir_multiple": "The folder holds {{count}} indexed media files; deleting it is not offered: {{path}}",
+      "template_error": "Template cannot be resolved; products were left out: {{path}} ({{detail}})"
+    },
+    "confirmMessage_one": "{{count}} items, about {{size}}, will be deleted. This cannot be undone; index rows go with them.",
+    "confirmMessage_other": "{{count}} items, about {{size}}, will be deleted. This cannot be undone; index rows go with them.",
+    "selected_one": "{{count}} selected, about {{size}}",
+    "selected_other": "{{count}} selected, about {{size}}",
+    "nodeCount_one": "{{count}} items",
+    "nodeCount_other": "{{count}} items",
+    "tabRules": "Cleanable items",
+    "tabTrash": "Trash",
+    "previewTitle": "Confirm what will be deleted",
+    "deleteMenu": "Delete",
+    "deleteRecord": "Record only",
+    "deleteFiles": "Delete files",
+    "deleteWorkDir": "Delete containing folder",
+    "scanning": "Scanning…",
+    "scanningHint": "You can close this panel; the scan keeps running",
+    "scanFailed": "Last scan failed",
+    "symlink": "Link",
+    "symlinkHint": "Deletes the link inside the library, not the file it points to",
+    "truncatedMore_one": "{{count}} more item is not included",
+    "truncatedMore_other": "{{count}} more items are not included",
+    "blocked_one": "{{count}} more folder was left out: unrecognized files",
+    "blocked_other": "{{count}} more folders were left out: unrecognized files",
+    "noise": "System file",
+    "noiseHint": "Created by the OS or a sync tool; deleted along with the folder",
+    "blocked": "{{count}} more folders were left out: unrecognized files",
+    "showNoise": "Show system files"
   }
 }

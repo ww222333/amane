@@ -1,19 +1,26 @@
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import datetime
-from typing import Unpack
+from typing import Unpack, cast
 
 from sqlalchemy import asc
-from sqlalchemy import delete as sqla_delete
+from sqlalchemy.exc import IntegrityError
 from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from ...enums import ActorGender
+from ...enums import ActorField, ActorGender
+from ...utils.text import normalize_long_text
 from ..actor_lookup import build_actor_lookup_names, list_actor_aliases, lookup_actors_by_name
-from ..actor_person import actor_to_aggregated, apply_aggregated_to_actor
+from ..actor_person import (
+    actor_to_aggregated,
+    apply_aggregated_to_actor,
+    filter_locked_person_data,
+    locked_fields_of,
+)
 from ..models import (
     SCRAPE_FACET_KINDS,
     Actor,
     ActorSortField,
+    ActorUserTag,
     Comment,
     Director,
     FacetKind,
@@ -34,7 +41,10 @@ from ..repo_types import (
     ActorPersonFields,
     CommentUpdates,
     FacetItem,
+    UserTagLinkAction,
+    UserTagLinkResult,
     UserTagUpdates,
+    WriteMode,
     _utcnow,
 )
 from .actor_browse import browse_actors
@@ -43,6 +53,8 @@ from .facet_helpers import (
     LINK_FACETS,
     SCALAR_FACETS,
     add_one_actor_alias,
+    apply_user_tags_to_actors,
+    apply_user_tags_to_metadata,
     delete_link_facet,
     delete_scalar_facet,
     get_facet,
@@ -50,6 +62,7 @@ from .facet_helpers import (
     merge_link_facets,
     merge_scalar_facets,
     normalize_names,
+    purge_user_tag_links,
     remove_one_actor_alias,
     rename_link_facet,
     rename_scalar_facet,
@@ -65,6 +78,34 @@ async def _rows_by_names[T: Actor | Director | Tag | Studio | Publisher | Series
     if not unique:
         return []
     return list((await session.exec(select(model).where(col(model.name).in_(unique)))).all())
+
+
+async def _ensure_user_tags_once(session: AsyncSession, names: Sequence[str]) -> tuple[list[UserTag], int]:
+    """一次尝试: 按名称取回已存在的行, 其余插入; 撞唯一索引由调用方回滚重试."""
+    existing = {
+        row.name: row for row in (await session.exec(select(UserTag).where(col(UserTag.name).in_(names)))).all()
+    }
+    created = 0
+    for name in names:
+        if name in existing:
+            continue
+        tag = UserTag(name=name)
+        session.add(tag)
+        existing[name] = tag
+        created += 1
+    await session.flush()
+    tags = [existing[name] for name in names]
+    await session.commit()
+    return tags, created
+
+
+_ACTOR_FIELD_NAMES = frozenset(str(field) for field in ActorField)
+
+
+def _merge_written_locks(locked: set[ActorField], field_names: Collection[str]) -> list[str]:
+    """MANUAL 写入: 把本次写入的可锁字段并入锁定集, 按枚举声明序输出."""
+    written = {ActorField(name) for name in field_names if name in _ACTOR_FIELD_NAMES}
+    return [str(field) for field in ActorField if field in locked | written]
 
 
 class FacetsRepoMixin(RepositoryMixinBase):
@@ -185,14 +226,21 @@ class FacetsRepoMixin(RepositoryMixinBase):
             return await browse_actors(session, params, id_subquery_sql=id_subquery_sql)
 
     async def save_actor(self, actor: Actor, *, aliases: Sequence[str] | None = None) -> Actor | None:
-        """不存在返回 None. ``aliases`` 提供时整表替换别名行; 省略则不动别名."""
+        """不存在返回 None. ``aliases`` 提供时整表替换别名行; 省略则不动别名.
+
+        AUTO 写入 (演员刮削), 锁定字段保留库内值与来源; 手动字段写入经 ``update_actor``.
+        """
         if actor.id is None:
             return None
         async with self._session() as session:
             db = await session.get(Actor, actor.id)
             if db is None:
                 return None
-            apply_aggregated_to_actor(db, actor_to_aggregated(actor))
+            data = actor_to_aggregated(actor)
+            locked = locked_fields_of(db)
+            if locked:
+                data = filter_locked_person_data(data, locked=locked, current=actor_to_aggregated(db))
+            apply_aggregated_to_actor(db, data)
             db.updated_at = _utcnow()
             session.add(db)
             if aliases is not None:
@@ -232,12 +280,32 @@ class FacetsRepoMixin(RepositoryMixinBase):
                 await session.commit()
             return ok
 
-    async def update_actor(self, actor_id: int, **updates: Unpack[ActorPersonFields]) -> Actor | None:
-        """不修改 name/id. 不存在返回 None. ``aliases`` 经 ``replace_actor_aliases`` 整表替换."""
+    async def update_actor(
+        self, actor_id: int, *, mode: WriteMode = WriteMode.AUTO, **updates: Unpack[ActorPersonFields]
+    ) -> Actor | None:
+        """不修改 name/id. 不存在返回 None. ``aliases`` 经 ``replace_actor_aliases`` 整表替换.
+
+        写入策略见 ``WriteMode``; 手动调用点须显式传 ``MANUAL``.
+        """
         async with self._session() as session:
             actor = await session.get(Actor, actor_id)
             if actor is None:
                 return None
+            locked = locked_fields_of(actor)
+            if mode is WriteMode.AUTO and locked:
+                filtered: dict[str, object] = {
+                    key: value
+                    for key, value in updates.items()
+                    if key not in _ACTOR_FIELD_NAMES or ActorField(key) not in locked
+                }
+                sources = filtered.get("field_sources")
+                if isinstance(sources, dict):
+                    preserved = {key: value for key, value in (actor.field_sources or {}).items() if key in locked}
+                    filtered["field_sources"] = {
+                        **preserved,
+                        **{key: value for key, value in sources.items() if key not in locked},
+                    }
+                updates = cast("ActorPersonFields", filtered)
             if "aliases" in updates:
                 await replace_actor_aliases(session, actor, updates["aliases"])
             if "gender" in updates:
@@ -257,7 +325,7 @@ class FacetsRepoMixin(RepositoryMixinBase):
             if "cup" in updates:
                 actor.cup = updates["cup"]
             if "overview" in updates:
-                actor.overview = updates["overview"]
+                actor.overview = normalize_long_text(updates["overview"])
             if "tagline" in updates:
                 actor.tagline = updates["tagline"]
             if "image_urls" in updates:
@@ -270,6 +338,51 @@ class FacetsRepoMixin(RepositoryMixinBase):
                 actor.field_sources = updates["field_sources"]
             if "raw" in updates:
                 actor.raw = updates["raw"]
+            if mode is WriteMode.MANUAL:
+                actor.locked_fields = _merge_written_locks(locked, updates.keys())
+            actor.updated_at = _utcnow()
+            session.add(actor)
+            await session.commit()
+            await session.refresh(actor)
+            return actor
+
+    async def set_actor_locks(self, actor_id: int, fields: Collection[ActorField]) -> Actor | None:
+        """整体替换锁定字段集合, 不修改 ``updated_at``. 不存在返回 None."""
+        async with self._session() as session:
+            actor = await session.get(Actor, actor_id)
+            if actor is None:
+                return None
+            wanted = set(fields)
+            actor.locked_fields = [str(field) for field in ActorField if field in wanted]
+            session.add(actor)
+            await session.commit()
+            await session.refresh(actor)
+            return actor
+
+    async def clear_actor_person(self, actor_id: int) -> Actor | None:
+        """清空人物档案并解除全部锁 (保留 ``name`` / ``gender`` / ``raw``). 不存在返回 None.
+
+        ``field_sources`` 一并清空: 残留来源指向空值, 且会让重刮后来源错位.
+        """
+        async with self._session() as session:
+            actor = await session.get(Actor, actor_id)
+            if actor is None:
+                return None
+            await replace_actor_aliases(session, actor, [])
+            actor.birthday = None
+            actor.birthplace = None
+            actor.height = None
+            actor.bust = None
+            actor.waist = None
+            actor.hip = None
+            actor.cup = None
+            actor.overview = None
+            actor.tagline = None
+            actor.image_urls = []
+            actor.provider_ids = {}
+            actor.source_urls = {}
+            actor.field_sources = {}
+            actor.locked_fields = []
             actor.updated_at = _utcnow()
             session.add(actor)
             await session.commit()
@@ -309,7 +422,7 @@ class FacetsRepoMixin(RepositoryMixinBase):
                 tag = await session.get(UserTag, facet_id)
                 if tag is None:
                     return False
-                await session.exec(sqla_delete(MetadataUserTag).where(col(MetadataUserTag.user_tag_id) == facet_id))
+                await purge_user_tag_links(session, facet_id)
                 await session.delete(tag)
                 await session.commit()
                 return True
@@ -347,13 +460,19 @@ class FacetsRepoMixin(RepositoryMixinBase):
         async with self._session() as session:
             return await session.get(UserTag, user_tag_id)
 
-    async def create_user_tag(self, name: str) -> UserTag:
+    async def ensure_user_tags(self, names: Sequence[str]) -> tuple[list[UserTag], int]:
+        """按名称取回或新建用户标签; 返回与入参同序的行与新建数量."""
+        unique = list(dict.fromkeys(names))
+        if not unique:
+            return [], 0
         async with self._session() as session:
-            tag = UserTag(name=name)
-            session.add(tag)
-            await session.commit()
-            await session.refresh(tag)
-            return tag
+            try:
+                return await _ensure_user_tags_once(session, unique)
+            except IntegrityError:
+                # 并发同名创建: 双方的 SELECT 都在对方提交前未命中, 后者撞唯一索引.
+                # 回滚重查即可取回对方刚提交的行, 不必把冲突暴露成 500.
+                await session.rollback()
+                return await _ensure_user_tags_once(session, unique)
 
     async def update_user_tag(self, user_tag_id: int, **updates: Unpack[UserTagUpdates]) -> UserTag | None:
         async with self._session() as session:
@@ -374,7 +493,7 @@ class FacetsRepoMixin(RepositoryMixinBase):
             if tag is None:
                 return False
             # 显式删除挂载, 不依赖 SQLite FK pragma
-            await session.exec(sqla_delete(MetadataUserTag).where(col(MetadataUserTag.user_tag_id) == user_tag_id))
+            await purge_user_tag_links(session, user_tag_id)
             await session.delete(tag)
             await session.commit()
             return True
@@ -390,60 +509,38 @@ class FacetsRepoMixin(RepositoryMixinBase):
             result = await session.exec(stmt)
             return list(result.all())
 
-    async def attach_user_tag(self, metadata_id: int, user_tag_id: int) -> bool:
-        """metadata/tag 不存在返回 False; 已存在则幂等成功."""
+    async def list_actor_user_tags(self, actor_id: int) -> list[UserTag]:
         async with self._session() as session:
-            if await session.get(Metadata, metadata_id) is None:
-                return False
-            if await session.get(UserTag, user_tag_id) is None:
-                return False
-            existing = await session.get(MetadataUserTag, (metadata_id, user_tag_id))
-            if existing is None:
-                session.add(MetadataUserTag(metadata_id=metadata_id, user_tag_id=user_tag_id))
-                await session.commit()
-            return True
+            stmt = (
+                select(UserTag)
+                .join(ActorUserTag, col(ActorUserTag.user_tag_id) == col(UserTag.id))
+                .where(col(ActorUserTag.actor_id) == actor_id)
+                .order_by(col(UserTag.name).asc())
+            )
+            result = await session.exec(stmt)
+            return list(result.all())
 
-    async def detach_user_tag(self, metadata_id: int, user_tag_id: int) -> bool:
+    async def apply_metadata_user_tags(
+        self,
+        ids: Sequence[int],
+        user_tag_ids: Sequence[int],
+        *,
+        action: UserTagLinkAction,
+    ) -> UserTagLinkResult:
+        """把一组用户标签应用到一组影片."""
         async with self._session() as session:
-            link = await session.get(MetadataUserTag, (metadata_id, user_tag_id))
-            if link is None:
-                return False
-            await session.delete(link)
-            await session.commit()
-            return True
+            return await apply_user_tags_to_metadata(session, ids, user_tag_ids, action)
 
-    async def batch_attach_user_tag(self, ids: list[int], user_tag_id: int) -> tuple[int, int]:
-        """幂等. user_tag 不存在则全部计入 missing."""
+    async def apply_actor_user_tags(
+        self,
+        ids: Sequence[int],
+        user_tag_ids: Sequence[int],
+        *,
+        action: UserTagLinkAction,
+    ) -> UserTagLinkResult:
+        """把一组用户标签应用到一组演员."""
         async with self._session() as session:
-            if await session.get(UserTag, user_tag_id) is None:
-                return 0, len(ids)
-            affected = 0
-            missing = 0
-            for metadata_id in ids:
-                if await session.get(Metadata, metadata_id) is None:
-                    missing += 1
-                    continue
-                existing = await session.get(MetadataUserTag, (metadata_id, user_tag_id))
-                if existing is None:
-                    session.add(MetadataUserTag(metadata_id=metadata_id, user_tag_id=user_tag_id))
-                affected += 1
-            await session.commit()
-            return affected, missing
-
-    async def batch_detach_user_tag(self, ids: list[int], user_tag_id: int) -> tuple[int, int]:
-        """missing 为未挂载, 或 metadata/tag 不存在的数量."""
-        async with self._session() as session:
-            affected = 0
-            missing = 0
-            for metadata_id in ids:
-                link = await session.get(MetadataUserTag, (metadata_id, user_tag_id))
-                if link is None:
-                    missing += 1
-                    continue
-                await session.delete(link)
-                affected += 1
-            await session.commit()
-            return affected, missing
+            return await apply_user_tags_to_actors(session, ids, user_tag_ids, action)
 
     async def list_comments(self, metadata_id: int) -> list[Comment]:
         async with self._session() as session:

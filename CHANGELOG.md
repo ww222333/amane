@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.14
+
+### 修复
+
+- **网络检测 500**: `content_routes` 为 `{sites, prefixes}` 时误把整条路由当站点 ID, 探测请求 Internal Server Error
+
 ## v1.0.13
 
 ### 修复

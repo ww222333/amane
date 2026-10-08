@@ -8,6 +8,7 @@ import pytest
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from amane.config import HotSettings, PluginConfig, SiteConfig
+from amane.config.manager import ContentRouteEntry
 from amane.crawlers.actor.base import ActorCrawler
 from amane.crawlers.actor.registry import actor_registry
 from amane.crawlers.actor.sites.gfriends import GFriendsActorCrawler
@@ -208,9 +209,10 @@ def _hot(
     image_sites: list[SiteName] | None = None,
 ) -> HotSettings:
     hot = HotSettings()
-    for chain in hot.scraping.content_routes.values():
-        chain.clear()
-    hot.scraping.content_routes[next(iter(hot.scraping.content_routes))] = list(routes)
+    first = next(iter(hot.scraping.content_routes))
+    for ct in list(hot.scraping.content_routes):
+        hot.scraping.content_routes[ct] = ContentRouteEntry(sites=[], prefixes=[])
+    hot.scraping.content_routes[first] = ContentRouteEntry(sites=list(routes), prefixes=[])
     hot.actor_scraping.profile_sites = list(profile_sites or [])
     hot.actor_scraping.image_sites = list(image_sites or [])
     return hot

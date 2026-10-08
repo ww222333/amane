@@ -81,8 +81,8 @@ class ConnectivityChecker:
 
     def _configured_ids(self) -> list[str]:
         chain_ids: list[str] = []
-        for sites in self._hot.scraping.content_routes.values():
-            chain_ids.extend(sites)
+        for entry in self._hot.scraping.content_routes.values():
+            chain_ids.extend(entry.sites)
         chain_ids.extend(str(site) for site in self._hot.actor_scraping.profile_sites)
         chain_ids.extend(str(site) for site in self._hot.actor_scraping.image_sites)
         return list(dict.fromkeys(chain_ids))

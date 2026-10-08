@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.13
+
+### 修复
+
+- **数据库迁移双 head**: 合并 fork 的 `library_fail_dir` 线与上游 `drop_retired_trash_tasks` 线, 启动时 `alembic upgrade head` 可继续
+
 ## v1.0.12
 
 ### 修复

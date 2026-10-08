@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Amane API",
-    "version": "0.18.0"
+    "version": "1.0.12"
   },
   "paths": {
     "/api/health": {
@@ -2261,6 +2261,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PluginListResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plugins/{plugin_id}/test": {
+      "post": {
+        "tags": [
+          "plugins"
+        ],
+        "summary": "Test Plugin",
+        "description": "用当前 (可覆盖) 配置构造临时 provider 并调用 ``test``; 不写配置、不入队任务.",
+        "operationId": "test_plugin",
+        "parameters": [
+          {
+            "name": "plugin_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Plugin Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PluginTestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PluginTestResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -7483,6 +7536,56 @@
         "title": "ConnectivityStatus",
         "description": "一次探测的结论. ``SKIPPED`` 是该来源本次不探测, 不是失败."
       },
+      "ContentRouteEntry": {
+        "properties": {
+          "sites": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "airav",
+                "avbase",
+                "avsox",
+                "dahlia",
+                "dmm",
+                "faleno",
+                "fc2",
+                "fc2club",
+                "fc2ppvdb",
+                "freejavbt",
+                "getchu",
+                "giga",
+                "iqqtv",
+                "jav321",
+                "javbus",
+                "javdb",
+                "javlibrary",
+                "kin8",
+                "mgstage",
+                "official",
+                "prestige",
+                "r18dev",
+                "theporndb",
+                "xcity"
+              ]
+            },
+            "type": "array",
+            "title": "",
+            "description": "",
+            "x-ordered": true
+          },
+          "prefixes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "自定义前缀",
+            "description": "匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先"
+          }
+        },
+        "type": "object",
+        "title": "ContentRouteEntry",
+        "description": "单个内容类型的路由: 站点名单 + 可选自定义前缀."
+      },
       "ContentType": {
         "type": "string",
         "enum": [
@@ -7492,7 +7595,8 @@
           "western",
           "fc2",
           "amateur",
-          "hentai"
+          "hentai",
+          "unknown"
         ],
         "title": "ContentType"
       },
@@ -8640,46 +8744,71 @@
               "poster_crop_skip_ratio": 0.9,
               "jpeg_quality": 95,
               "content_routes": {
-                "amateur": [
-                  "mgstage",
-                  "dmm",
-                  "javdb",
-                  "javbus"
-                ],
-                "censored": [
-                  "dmm",
-                  "javdb",
-                  "javbus",
-                  "official"
-                ],
-                "chinese": [
-                  "iqqtv",
-                  "javdb",
-                  "airav",
-                  "freejavbt"
-                ],
-                "fc2": [
-                  "javdb",
-                  "fc2ppvdb",
-                  "fc2",
-                  "freejavbt"
-                ],
-                "hentai": [
-                  "getchu",
-                  "dmm",
-                  "javdb"
-                ],
-                "uncensored": [
-                  "javdb",
-                  "javbus",
-                  "avsox",
-                  "freejavbt"
-                ],
-                "western": [
-                  "theporndb",
-                  "javdb",
-                  "freejavbt"
-                ]
+                "amateur": {
+                  "prefixes": [],
+                  "sites": [
+                    "mgstage",
+                    "dmm",
+                    "javdb",
+                    "javbus"
+                  ]
+                },
+                "censored": {
+                  "prefixes": [],
+                  "sites": [
+                    "dmm",
+                    "javdb",
+                    "javbus",
+                    "official"
+                  ]
+                },
+                "chinese": {
+                  "prefixes": [],
+                  "sites": [
+                    "iqqtv",
+                    "javdb",
+                    "airav",
+                    "freejavbt"
+                  ]
+                },
+                "fc2": {
+                  "prefixes": [],
+                  "sites": [
+                    "javdb",
+                    "fc2ppvdb",
+                    "fc2",
+                    "freejavbt"
+                  ]
+                },
+                "hentai": {
+                  "prefixes": [],
+                  "sites": [
+                    "getchu",
+                    "dmm",
+                    "javdb"
+                  ]
+                },
+                "uncensored": {
+                  "prefixes": [],
+                  "sites": [
+                    "javdb",
+                    "javbus",
+                    "avsox",
+                    "freejavbt"
+                  ]
+                },
+                "unknown": {
+                  "prefixes": [],
+                  "sites": []
+                },
+                "western": {
+                  "prefixes": [],
+                  "sites": [
+                    "theporndb",
+                    "javdb",
+                    "freejavbt"
+                  ]
+                }
               },
               "field_priority": {},
               "field_blacklist": {},
@@ -9636,6 +9765,26 @@
             "title": "Write Nfo",
             "default": true
           },
+          "trash_empty_source": {
+            "type": "boolean",
+            "title": "Trash Empty Source",
+            "default": false
+          },
+          "fail_dir": {
+            "type": "string",
+            "title": "Fail Dir",
+            "default": ""
+          },
+          "move_to_fail_dir": {
+            "type": "boolean",
+            "title": "Move To Fail Dir",
+            "default": false
+          },
+          "exclude_fail_dir": {
+            "type": "boolean",
+            "title": "Exclude Fail Dir",
+            "default": true
+          },
           "copy_resources": {
             "items": {
               "$ref": "#/components/schemas/DownloadableResource"
@@ -9861,6 +10010,22 @@
             "type": "boolean",
             "title": "Write Nfo"
           },
+          "trash_empty_source": {
+            "type": "boolean",
+            "title": "Trash Empty Source"
+          },
+          "fail_dir": {
+            "type": "string",
+            "title": "Fail Dir"
+          },
+          "move_to_fail_dir": {
+            "type": "boolean",
+            "title": "Move To Fail Dir"
+          },
+          "exclude_fail_dir": {
+            "type": "boolean",
+            "title": "Exclude Fail Dir"
+          },
           "copy_resources": {
             "items": {
               "$ref": "#/components/schemas/DownloadableResource"
@@ -9897,6 +10062,10 @@
           "link_mode",
           "subtitle_extensions",
           "write_nfo",
+          "trash_empty_source",
+          "fail_dir",
+          "move_to_fail_dir",
+          "exclude_fail_dir",
           "copy_resources",
           "trailer_pattern",
           "blacklist_patterns",
@@ -10138,6 +10307,50 @@
               }
             ],
             "title": "Write Nfo"
+          },
+          "trash_empty_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trash Empty Source"
+          },
+          "fail_dir": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fail Dir"
+          },
+          "move_to_fail_dir": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move To Fail Dir"
+          },
+          "exclude_fail_dir": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Exclude Fail Dir"
           },
           "copy_resources": {
             "anyOf": [
@@ -11519,6 +11732,30 @@
             "title": "Copy Resources",
             "description": "覆盖 Library.copy_resources; None 沿用库设置"
           },
+          "trash_empty_source": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trash Empty Source",
+            "description": "覆盖 Library.trash_empty_source; None 沿用库设置. 为真则整理后全库扫描, 递归无视频的目录整夹入 .amane_trash (不碰库根 / 回收目录 / 刮削失败输出目录)"
+          },
+          "move_to_fail_dir": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Move To Fail Dir",
+            "description": "覆盖 Library.move_to_fail_dir; None 沿用库设置. 为真且库 fail_dir 非空时, 无 Metadata 的正片整夹移入失败目录"
+          },
           "media_file_ids": {
             "anyOf": [
               {
@@ -11870,6 +12107,11 @@
               }
             ],
             "title": "Path"
+          },
+          "supports_test": {
+            "type": "boolean",
+            "title": "Supports Test",
+            "default": false
           }
         },
         "type": "object",
@@ -11879,6 +12121,38 @@
           "config_schema"
         ],
         "title": "PluginResponse"
+      },
+      "PluginTestRequest": {
+        "properties": {
+          "config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Config"
+          }
+        },
+        "type": "object",
+        "title": "PluginTestRequest",
+        "description": "连通测试请求; ``config`` 覆盖已保存项后用于构造临时 provider, 不写回配置."
+      },
+      "PluginTestResponse": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok"
+          },
+          "detail": {
+            "type": "string",
+            "title": "Detail",
+            "default": ""
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "ok"
+        ],
+        "title": "PluginTestResponse",
+        "description": "连通测试响应, 形状与 ``FilmSourceTestResult`` 相同."
       },
       "R18Config": {
         "properties": {
@@ -12894,37 +13168,7 @@
           },
           "content_routes": {
             "additionalProperties": {
-              "items": {
-                "type": "string",
-                "enum": [
-                  "airav",
-                  "avbase",
-                  "avsox",
-                  "dahlia",
-                  "dmm",
-                  "faleno",
-                  "fc2",
-                  "fc2club",
-                  "fc2ppvdb",
-                  "freejavbt",
-                  "getchu",
-                  "giga",
-                  "iqqtv",
-                  "jav321",
-                  "javbus",
-                  "javdb",
-                  "javlibrary",
-                  "kin8",
-                  "mgstage",
-                  "official",
-                  "prestige",
-                  "r18dev",
-                  "theporndb",
-                  "xcity"
-                ]
-              },
-              "type": "array",
-              "x-ordered": true
+              "$ref": "#/components/schemas/ContentRouteEntry"
             },
             "propertyNames": {
               "$ref": "#/components/schemas/ContentType"

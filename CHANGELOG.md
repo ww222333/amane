@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.12
+
+### 修复
+
+- **发版 Docker / 前端类型**: 重新导出 OpenAPI 并生成 TS client, 补齐 fork 字段 (`fail_dir` / `trash_empty_source` / 插件 `test` / `ContentType.unknown`), 修复 `pnpm build` 失败导致镜像未发布
+
 ## v1.0.11
 
 ### 新功能

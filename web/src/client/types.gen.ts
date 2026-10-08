@@ -762,9 +762,24 @@ export type ConnectivityReportResponse = {
 export type ConnectivityStatus = 'ok' | 'failed' | 'skipped';
 
 /**
+ * ContentRouteEntry
+ *
+ * 单个内容类型的路由: 站点名单 + 可选自定义前缀.
+ */
+export type ContentRouteEntry = {
+    sites?: Array<'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+    /**
+     * 自定义前缀
+     *
+     * 匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先
+     */
+    prefixes?: Array<string>;
+};
+
+/**
  * ContentType
  */
-export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai';
+export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai' | 'unknown';
 
 /**
  * CropAvatarRequest
@@ -1796,6 +1811,22 @@ export type LibraryCreateRequest = {
      */
     write_nfo?: boolean;
     /**
+     * Trash Empty Source
+     */
+    trash_empty_source?: boolean;
+    /**
+     * Fail Dir
+     */
+    fail_dir?: string;
+    /**
+     * Move To Fail Dir
+     */
+    move_to_fail_dir?: boolean;
+    /**
+     * Exclude Fail Dir
+     */
+    exclude_fail_dir?: boolean;
+    /**
      * Copy Resources
      */
     copy_resources?: Array<DownloadableResource>;
@@ -1915,6 +1946,22 @@ export type LibraryResponse = {
      */
     write_nfo: boolean;
     /**
+     * Trash Empty Source
+     */
+    trash_empty_source: boolean;
+    /**
+     * Fail Dir
+     */
+    fail_dir: string;
+    /**
+     * Move To Fail Dir
+     */
+    move_to_fail_dir: boolean;
+    /**
+     * Exclude Fail Dir
+     */
+    exclude_fail_dir: boolean;
+    /**
      * Copy Resources
      */
     copy_resources: Array<DownloadableResource>;
@@ -2008,6 +2055,22 @@ export type LibraryUpdateRequest = {
      * Write Nfo
      */
     write_nfo?: boolean | null;
+    /**
+     * Trash Empty Source
+     */
+    trash_empty_source?: boolean | null;
+    /**
+     * Fail Dir
+     */
+    fail_dir?: string | null;
+    /**
+     * Move To Fail Dir
+     */
+    move_to_fail_dir?: boolean | null;
+    /**
+     * Exclude Fail Dir
+     */
+    exclude_fail_dir?: boolean | null;
     /**
      * Copy Resources
      */
@@ -2706,6 +2769,18 @@ export type OrganizeSubmission = {
      */
     copy_resources?: Array<DownloadableResource> | null;
     /**
+     * Trash Empty Source
+     *
+     * 覆盖 Library.trash_empty_source; None 沿用库设置. 为真则整理后全库扫描, 递归无视频的目录整夹入 .amane_trash (不碰库根 / 回收目录 / 刮削失败输出目录)
+     */
+    trash_empty_source?: boolean | null;
+    /**
+     * Move To Fail Dir
+     *
+     * 覆盖 Library.move_to_fail_dir; None 沿用库设置. 为真且库 fail_dir 非空时, 无 Metadata 的正片整夹移入失败目录
+     */
+    move_to_fail_dir?: boolean | null;
+    /**
      * Media File Ids
      *
      * 勾选快照; 与 path 不能同时指定. None 表示 path 范围内的全部索引
@@ -2948,6 +3023,40 @@ export type PluginResponse = {
      * Path
      */
     path?: string | null;
+    /**
+     * Supports Test
+     */
+    supports_test?: boolean;
+};
+
+/**
+ * PluginTestRequest
+ *
+ * 连通测试请求; ``config`` 覆盖已保存项后用于构造临时 provider, 不写回配置.
+ */
+export type PluginTestRequest = {
+    /**
+     * Config
+     */
+    config?: {
+        [key: string]: unknown;
+    };
+};
+
+/**
+ * PluginTestResponse
+ *
+ * 连通测试响应, 形状与 ``FilmSourceTestResult`` 相同.
+ */
+export type PluginTestResponse = {
+    /**
+     * Ok
+     */
+    ok: boolean;
+    /**
+     * Detail
+     */
+    detail?: string;
 };
 
 /**
@@ -3556,7 +3665,7 @@ export type ScrapingConfig = {
      * Content Routes
      */
     content_routes?: {
-        [key in ContentType]?: Array<'airav' | 'avbase' | 'avsox' | 'dahlia' | 'dmm' | 'faleno' | 'fc2' | 'fc2club' | 'fc2ppvdb' | 'freejavbt' | 'getchu' | 'giga' | 'iqqtv' | 'jav321' | 'javbus' | 'javdb' | 'javlibrary' | 'kin8' | 'mgstage' | 'official' | 'prestige' | 'r18dev' | 'theporndb' | 'xcity'>;
+        [key in ContentType]?: ContentRouteEntry;
     };
     /**
      * Field Priority
@@ -5793,6 +5902,36 @@ export type ReloadPluginsResponses = {
 };
 
 export type ReloadPluginsResponse = ReloadPluginsResponses[keyof ReloadPluginsResponses];
+
+export type TestPluginData = {
+    body: PluginTestRequest;
+    path: {
+        /**
+         * Plugin Id
+         */
+        plugin_id: string;
+    };
+    query?: never;
+    url: '/api/plugins/{plugin_id}/test';
+};
+
+export type TestPluginErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type TestPluginError = TestPluginErrors[keyof TestPluginErrors];
+
+export type TestPluginResponses = {
+    /**
+     * Successful Response
+     */
+    200: PluginTestResponse;
+};
+
+export type TestPluginResponse = TestPluginResponses[keyof TestPluginResponses];
 
 export type UninstallPluginData = {
     body?: never;

@@ -1401,6 +1401,57 @@ export const ConnectivityStatusSchema = {
     description: '一次探测的结论. ``SKIPPED`` 是该来源本次不探测, 不是失败.'
 } as const;
 
+export const ContentRouteEntrySchema = {
+    properties: {
+        sites: {
+            items: {
+                type: 'string',
+                enum: [
+                    'airav',
+                    'avbase',
+                    'avsox',
+                    'dahlia',
+                    'dmm',
+                    'faleno',
+                    'fc2',
+                    'fc2club',
+                    'fc2ppvdb',
+                    'freejavbt',
+                    'getchu',
+                    'giga',
+                    'iqqtv',
+                    'jav321',
+                    'javbus',
+                    'javdb',
+                    'javlibrary',
+                    'kin8',
+                    'mgstage',
+                    'official',
+                    'prestige',
+                    'r18dev',
+                    'theporndb',
+                    'xcity'
+                ]
+            },
+            type: 'array',
+            title: '',
+            description: '',
+            'x-ordered': true
+        },
+        prefixes: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: '自定义前缀',
+            description: '匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先'
+        }
+    },
+    type: 'object',
+    title: 'ContentRouteEntry',
+    description: '单个内容类型的路由: 站点名单 + 可选自定义前缀.'
+} as const;
+
 export const ContentTypeSchema = {
     type: 'string',
     enum: [
@@ -1410,7 +1461,8 @@ export const ContentTypeSchema = {
         'western',
         'fc2',
         'amateur',
-        'hentai'
+        'hentai',
+        'unknown'
     ],
     title: 'ContentType'
 } as const;
@@ -2591,46 +2643,71 @@ export const HotSettingsSchema = {
                 poster_crop_skip_ratio: 0.9,
                 jpeg_quality: 95,
                 content_routes: {
-                    amateur: [
-                        'mgstage',
-                        'dmm',
-                        'javdb',
-                        'javbus'
-                    ],
-                    censored: [
-                        'dmm',
-                        'javdb',
-                        'javbus',
-                        'official'
-                    ],
-                    chinese: [
-                        'iqqtv',
-                        'javdb',
-                        'airav',
-                        'freejavbt'
-                    ],
-                    fc2: [
-                        'javdb',
-                        'fc2ppvdb',
-                        'fc2',
-                        'freejavbt'
-                    ],
-                    hentai: [
-                        'getchu',
-                        'dmm',
-                        'javdb'
-                    ],
-                    uncensored: [
-                        'javdb',
-                        'javbus',
-                        'avsox',
-                        'freejavbt'
-                    ],
-                    western: [
-                        'theporndb',
-                        'javdb',
-                        'freejavbt'
-                    ]
+                    amateur: {
+                        prefixes: [],
+                        sites: [
+                            'mgstage',
+                            'dmm',
+                            'javdb',
+                            'javbus'
+                        ]
+                    },
+                    censored: {
+                        prefixes: [],
+                        sites: [
+                            'dmm',
+                            'javdb',
+                            'javbus',
+                            'official'
+                        ]
+                    },
+                    chinese: {
+                        prefixes: [],
+                        sites: [
+                            'iqqtv',
+                            'javdb',
+                            'airav',
+                            'freejavbt'
+                        ]
+                    },
+                    fc2: {
+                        prefixes: [],
+                        sites: [
+                            'javdb',
+                            'fc2ppvdb',
+                            'fc2',
+                            'freejavbt'
+                        ]
+                    },
+                    hentai: {
+                        prefixes: [],
+                        sites: [
+                            'getchu',
+                            'dmm',
+                            'javdb'
+                        ]
+                    },
+                    uncensored: {
+                        prefixes: [],
+                        sites: [
+                            'javdb',
+                            'javbus',
+                            'avsox',
+                            'freejavbt'
+                        ]
+                    },
+                    unknown: {
+                        prefixes: [],
+                        sites: []
+                    },
+                    western: {
+                        prefixes: [],
+                        sites: [
+                            'theporndb',
+                            'javdb',
+                            'freejavbt'
+                        ]
+                    }
                 },
                 field_priority: {},
                 field_blacklist: {},
@@ -3598,6 +3675,26 @@ export const LibraryCreateRequestSchema = {
             title: 'Write Nfo',
             default: true
         },
+        trash_empty_source: {
+            type: 'boolean',
+            title: 'Trash Empty Source',
+            default: false
+        },
+        fail_dir: {
+            type: 'string',
+            title: 'Fail Dir',
+            default: ''
+        },
+        move_to_fail_dir: {
+            type: 'boolean',
+            title: 'Move To Fail Dir',
+            default: false
+        },
+        exclude_fail_dir: {
+            type: 'boolean',
+            title: 'Exclude Fail Dir',
+            default: true
+        },
         copy_resources: {
             items: {
                 $ref: '#/components/schemas/DownloadableResource'
@@ -3826,6 +3923,22 @@ export const LibraryResponseSchema = {
             type: 'boolean',
             title: 'Write Nfo'
         },
+        trash_empty_source: {
+            type: 'boolean',
+            title: 'Trash Empty Source'
+        },
+        fail_dir: {
+            type: 'string',
+            title: 'Fail Dir'
+        },
+        move_to_fail_dir: {
+            type: 'boolean',
+            title: 'Move To Fail Dir'
+        },
+        exclude_fail_dir: {
+            type: 'boolean',
+            title: 'Exclude Fail Dir'
+        },
         copy_resources: {
             items: {
                 $ref: '#/components/schemas/DownloadableResource'
@@ -3862,6 +3975,10 @@ export const LibraryResponseSchema = {
         'link_mode',
         'subtitle_extensions',
         'write_nfo',
+        'trash_empty_source',
+        'fail_dir',
+        'move_to_fail_dir',
+        'exclude_fail_dir',
         'copy_resources',
         'trailer_pattern',
         'blacklist_patterns',
@@ -4104,6 +4221,50 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Write Nfo'
+        },
+        trash_empty_source: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Trash Empty Source'
+        },
+        fail_dir: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Fail Dir'
+        },
+        move_to_fail_dir: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Move To Fail Dir'
+        },
+        exclude_fail_dir: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Exclude Fail Dir'
         },
         copy_resources: {
             anyOf: [
@@ -5511,6 +5672,30 @@ export const OrganizeSubmissionSchema = {
             title: 'Copy Resources',
             description: '覆盖 Library.copy_resources; None 沿用库设置'
         },
+        trash_empty_source: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Trash Empty Source',
+            description: '覆盖 Library.trash_empty_source; None 沿用库设置. 为真则整理后全库扫描, 递归无视频的目录整夹入 .amane_trash (不碰库根 / 回收目录 / 刮削失败输出目录)'
+        },
+        move_to_fail_dir: {
+            anyOf: [
+                {
+                    type: 'boolean'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Move To Fail Dir',
+            description: '覆盖 Library.move_to_fail_dir; None 沿用库设置. 为真且库 fail_dir 非空时, 无 Metadata 的正片整夹移入失败目录'
+        },
         media_file_ids: {
             anyOf: [
                 {
@@ -5874,6 +6059,11 @@ export const PluginResponseSchema = {
                 }
             ],
             title: 'Path'
+        },
+        supports_test: {
+            type: 'boolean',
+            title: 'Supports Test',
+            default: false
         }
     },
     type: 'object',
@@ -5883,6 +6073,40 @@ export const PluginResponseSchema = {
         'config_schema'
     ],
     title: 'PluginResponse'
+} as const;
+
+export const PluginTestRequestSchema = {
+    properties: {
+        config: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Config'
+        }
+    },
+    type: 'object',
+    title: 'PluginTestRequest',
+    description: '连通测试请求; ``config`` 覆盖已保存项后用于构造临时 provider, 不写回配置.'
+} as const;
+
+export const PluginTestResponseSchema = {
+    properties: {
+        ok: {
+            type: 'boolean',
+            title: 'Ok'
+        },
+        detail: {
+            type: 'string',
+            title: 'Detail',
+            default: ''
+        }
+    },
+    additionalProperties: false,
+    type: 'object',
+    required: [
+        'ok'
+    ],
+    title: 'PluginTestResponse',
+    description: '连通测试响应, 形状与 ``FilmSourceTestResult`` 相同.'
 } as const;
 
 export const R18ConfigSchema = {
@@ -6925,37 +7149,7 @@ export const ScrapingConfigSchema = {
         },
         content_routes: {
             additionalProperties: {
-                items: {
-                    type: 'string',
-                    enum: [
-                        'airav',
-                        'avbase',
-                        'avsox',
-                        'dahlia',
-                        'dmm',
-                        'faleno',
-                        'fc2',
-                        'fc2club',
-                        'fc2ppvdb',
-                        'freejavbt',
-                        'getchu',
-                        'giga',
-                        'iqqtv',
-                        'jav321',
-                        'javbus',
-                        'javdb',
-                        'javlibrary',
-                        'kin8',
-                        'mgstage',
-                        'official',
-                        'prestige',
-                        'r18dev',
-                        'theporndb',
-                        'xcity'
-                    ]
-                },
-                type: 'array',
-                'x-ordered': true
+                $ref: '#/components/schemas/ContentRouteEntry'
             },
             propertyNames: {
                 $ref: '#/components/schemas/ContentType'

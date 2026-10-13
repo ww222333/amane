@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.17
+
+### 修复
+
+- **数据库迁移双 head**: 合并 fork `fail_dir` 线 (`836b567fc54c`) 与上游 kin8 重投影线 (`8dbd0fa0905e`), 启动时 `alembic upgrade head` 可继续
+
 ## v1.0.16
 
 ### 修复

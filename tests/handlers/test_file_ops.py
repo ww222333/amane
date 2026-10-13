@@ -1,5 +1,6 @@
 """测试 file ops 消费已物化 URL (内部派生 / 外部) + trailer 落盘."""
 
+from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
 import pytest
@@ -9,12 +10,10 @@ from amane.config import HotSettings, WatermarkConfig
 from amane.db.models import MediaFile, Metadata
 from amane.handlers.file import execute_file_operations
 from amane.media import ResourceStore
-from amane.organize import MoveMode, ResolvedPaths
+from amane.organize import MoveMode, PlaceOutcome, ResolvedPaths
 from amane.parsing import ContentType, FileInfo
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from amane.net.http import WebClient
 
 
@@ -85,11 +84,88 @@ async def test_internal_poster_and_trailer(resource_store: ResourceStore, tmp_pa
         web_client=client,
         config=HotSettings(),
     )
-    assert result.success is True
+    assert result.outcome is PlaceOutcome.PLACED
     assert paths.thumb.exists()  # 外部下载
     assert paths.poster.exists()  # 内部派生解析
     assert paths.trailer.exists()  # trailer 落盘
     assert paths.trailer.read_bytes() == b"video"
+
+
+@pytest.mark.asyncio
+async def test_target_occupied_returns_before_side_effects(resource_store: ResourceStore, tmp_path: Path):
+    """目标被占用时立即返回: 不下载图片、不写 NFO、不动磁盘."""
+    client = cast("WebClient", FakeClient())
+
+    src = tmp_path / "src" / "MIDV-123.mp4"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"movie")
+
+    paths = _paths(tmp_path / "out")
+    paths.video.parent.mkdir(parents=True)
+    paths.video.write_text("existing content")
+
+    mf = MediaFile(path=str(src), library_id=1)
+    meta = Metadata(number="MIDV-123", thumb_urls=["https://s/t.jpg"])
+
+    result = await execute_file_operations(
+        media_file=mf,
+        metadata=meta,
+        paths=paths,
+        move_mode=MoveMode.MOVE,
+        resource_store=resource_store,
+        web_client=client,
+        config=HotSettings(),
+    )
+
+    assert result.outcome is PlaceOutcome.CONFLICT
+    assert result.conflict_target == paths.video
+    assert paths.video.read_text() == "existing content"
+    assert src.read_bytes() == b"movie"
+    assert not paths.thumb.exists()
+    assert not paths.nfo.exists()
+
+
+@pytest.mark.asyncio
+async def test_unknown_target_state_returns_before_side_effects(
+    resource_store: ResourceStore, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    """读不出目标状态时立即返回并记为失败: 不下载图片、不写 NFO、不动磁盘."""
+    client = cast("WebClient", FakeClient())
+
+    src = tmp_path / "src" / "MIDV-123.mp4"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(b"movie")
+
+    paths = _paths(tmp_path / "out")
+    paths.video.parent.mkdir(parents=True)
+    paths.video.write_text("existing content")
+
+    def denied(self: Path, other: object) -> bool:
+        raise PermissionError(13, "Permission denied", str(other))
+
+    monkeypatch.setattr(Path, "samefile", denied)
+
+    mf = MediaFile(path=str(src), library_id=1)
+    meta = Metadata(number="MIDV-123", thumb_urls=["https://s/t.jpg"])
+
+    result = await execute_file_operations(
+        media_file=mf,
+        metadata=meta,
+        paths=paths,
+        move_mode=MoveMode.MOVE,
+        resource_store=resource_store,
+        web_client=client,
+        config=HotSettings(),
+    )
+
+    assert result.outcome is PlaceOutcome.FAILED
+    assert result.error is not None
+    assert "Permission denied" in result.error
+    assert result.conflict_target is None
+    assert paths.video.read_text() == "existing content"
+    assert src.read_bytes() == b"movie"
+    assert not paths.thumb.exists()
+    assert not paths.nfo.exists()
 
 
 @pytest.mark.asyncio
@@ -115,7 +191,7 @@ async def test_copy_resources_skips_trailer(resource_store: ResourceStore, tmp_p
         config=HotSettings(),
         copy_resources=[DownloadableResource.thumb, DownloadableResource.poster],
     )
-    assert result.success is True
+    assert result.outcome is PlaceOutcome.PLACED
     assert paths.thumb.exists()
     assert not paths.trailer.exists()
 
@@ -140,7 +216,7 @@ async def test_write_nfo_false_skips_nfo(resource_store: ResourceStore, tmp_path
         config=HotSettings(),
         write_nfo=False,
     )
-    assert result.success is True
+    assert result.outcome is PlaceOutcome.PLACED
     assert not paths.nfo.exists()
 
 
@@ -168,7 +244,7 @@ async def test_missing_internal_resource_falls_back_to_crop(resource_store: Reso
         web_client=client,
         config=HotSettings(),
     )
-    assert result.success is True
+    assert result.outcome is PlaceOutcome.PLACED
     assert paths.poster.exists()  # 裁剪回退
 
 
@@ -198,7 +274,7 @@ async def test_watermark_respects_enabled(resource_store: ResourceStore, tmp_pat
         file_info=FileInfo(number="MIDV-123", content_type=ContentType.CENSORED, prefix="MIDV", has_subtitle=True),
         watermark_dir=user_dir,
     )
-    assert result.success is True
+    assert result.outcome is PlaceOutcome.PLACED
     with Image.open(paths.thumb) as img:
         pixel = img.convert("RGB").getpixel((20, 20))
     assert isinstance(pixel, tuple)

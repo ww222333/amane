@@ -23,7 +23,7 @@ HTTP 宿主与 DI 在 `app.py` / `deps.py` / `middleware.py` / `spa.py`; `routes
 | `actors` | `/actors` | 演员浏览 (含用户标签筛选)、人物 PATCH / 锁 / 清空、用户标签挂载、刮削; 身份治理经由 facets |
 | `facets` | `/facets` | 分类目录与规则 |
 | `comments` | `/comments` | 评论修改与删除; 新建经由 metadata |
-| `tasks` | `/tasks` | 队列 + `POST /batch` + worker 暂停领队 + 终态 `report` / `record` |
+| `tasks` | `/tasks` | 队列 + `POST /batch` + worker 暂停领队 + 终态 `record` |
 | `schedules` | `/schedules` | cron CRUD + trigger |
 | `config` | `/config` | HotSettings + schema |
 | `plugins` | `/plugins` | 插件目录、安装 / 卸载 / 热扫描、配置 schema 与启用状态 |
@@ -41,7 +41,8 @@ OpenAPI 列出参数, 不表达组合语义:
 - GET `/media` 的相位 query 作用在单行列上: 布尔 False 是 `col = false`, 不是 metadata 那种 NOT EXISTS. 未知 `definition` → 422; 相位列不纳入 PATCH.
 - 手动裁切基准是源图**当前本地文件**像素 (含就地超分后尺寸): 海报以 `thumb_urls[0]` 为源并替换 `poster_urls`, 演员头像以 `image_urls[0]` 为源并前插保留原图; 库路径海报不受影响. locator 见 [data-model.md](data-model.md).
 - `PUT /metadata/{id}/locks` 与 `PUT /actors/{id}/locks` 整体替换锁定字段集合; 锁语义见 [data-model.md](data-model.md)「字段锁定」.
-- 注册顺序有约束的五处: `/facets/{kind}/rules` 先于 `/{facet_id}`; `/plugins/reload` 先于 `/plugins/{plugin_id}` (否则 `reload` 被当成插件 ID); `/tasks/batch` 与 `/tasks/worker*` 先于 `/{task_id}` (否则被当成非法整数 id); `/feeds/items` 先于 `/{feed_id}`; `/playback/sources` 先于 `/{source_id}`.
+- `GET /facets/{kind}` 的 `favorite` 过滤与 `POST /facets/{kind}/batch` 的收藏写入只在可收藏的分类上成立 (`db/models.py::FAVORITE_FACET_KINDS`; 链接型分类中的 `director` 与 `tag` 同样成立): 传入 `favorite` (与取值无关) 或对不支持的 kind 写收藏都是 400, 其余 kind 恒为 false. 写端点按 `action` 分派, 空 `facet_ids` 与未登记的 `action` 是 422, 取去重后的 `facet_ids`, 不存在的 id 计入 `missing` 而不报 404, 三个计数之和等于去重后的条目数. 见 [data-model.md](data-model.md).
+- 注册顺序有约束的五处: `/facets/{kind}/rules` 先于 `/{facet_id}` (否则 `rules` 被当成 facet_id); `/plugins/reload` 先于 `/plugins/{plugin_id}` (否则 `reload` 被当成插件 ID); `/tasks/batch` 与 `/tasks/worker*` 先于 `/{task_id}` (否则被当成非法整数 id); `/feeds/items` 先于 `/{feed_id}`; `/playback/sources` 先于 `/{source_id}`.
 - 播放端点的形状 (流的一行、`available` / `key` / `detail` 的三种组合、Range、HLS 分片与字幕路径、404 / 502 语义) 见 [plugins.md](plugins.md)「播放源」.
 - `/network/check` 的探测范围 = 当前热配置真正会请求的来源 (各类型路由的并集 + 演员资料来源 / 头像来源), 省略 `source_ids` 即全量. `source_id` 是 `str` 而非 `SiteName` 枚举 (第三方来源是 `namespace.local`, 且来源集合随插件增删变化), 未知值无法用 schema 拒绝, 不存在的 ID 计入条目返回 `SKIPPED`. 逐来源的失败只进条目, 端点始终 200 — 探测结果本身就是响应体; `reason` 只在失败时给出, `skip_reason` 只在未探测时给出, `detail` 是语言中立的补充说明 (界面原样渲染, 不翻译). 探测不进入任务队列, 也不写入站点 outcome (那是刮削任务的记录).
 - 评论正文先去除首尾空白再校验长度, 全空白与超过 10000 字符均为 422. `updated_at` 晚于 `created_at` 表示正文被编辑过: PATCH 提交与库中一致的正文不写库, 也不刷新 `updated_at`, 前端据此判定「已编辑」; 排序由前端在详情响应上完成, 端点不提供 order 参数.
@@ -61,9 +62,9 @@ OpenAPI 列出参数, 不表达组合语义:
 
 **错误**: `HTTPException(detail=中文)`. 路径校验位于 `support/path_validation.py` (存在 / 类型 / `safe_dirs` → 400 / 403 / 404; `ALLOW_ALL` 时跳过边界层). `/files` 的失败映射: 不存在 → 404, 不在 `safe_dirs` → 403, 空名单 → 500, `os.scandir` 的 `OSError` (含网络盘挂载失效) → 500 + strerror detail, `PermissionError` → 403. 错误日志统一由 LoggingMiddleware 打点 (见 [observability.md](observability.md)), handler 内不自行打印.
 
-**列表**: `media` / `metadata` / `tasks` / `facets` / `actors` 同构 `offset` + `limit` + `sort_by` + `order`, 响应 `{items, total}`; `sort_by` 是各资源 `*SortField` 枚举, repo 用 enum→Column, 禁止反射列名. 清理清单的 `cleanup/inventory/nodes` 同样是 `offset` / `limit` + `{items, total}`, 顺序由树决定, 因此没有排序参数 (见 [task-system.md](task-system.md)). `libraries` / `schedules` / `feeds` 全量无分页. `GET /actors` 列表项不填简介 / 别名 / 用户标签 / 源字典 / `raw` (详情仍全量).
+**列表**: `media` / `metadata` / `tasks` / `facets` / `actors` 同构 `offset` + `limit` + `sort_by` + `order`, 响应 `{items, total}`; `sort_by` 是各资源 `*SortField` 枚举, repo 用 enum→Column, 禁止反射列名. 清理清单的 `cleanup/inventory/nodes` 同样是 `offset` / `limit` + `{items, total}`, 顺序由树决定, 因此没有排序参数 (见 [task-system.md](task-system.md)). `libraries` / `schedules` / `feeds` 全量无分页. `GET /actors` 列表项不填简介 / 别名 / 用户标签 / 源字典 / `raw` (详情仍全量); `GET /tasks` 与其 `/children` 同样不带 `payload` 与 `result`, 展开单个任务时才取详情.
 
-**状态码**: 创建 201、任务入队 202、无返回体 204; 空 PATCH / 非法 cron → 422; 任务状态不允许的 report / record → 409.
+**状态码**: 创建 201、任务入队 202、无返回体 204; 空 PATCH / 非法 cron → 422; 任务状态不允许的 record → 409.
 
 **资源缓存**: `/resources/{hash}` 与 `/proxy` 因就地超分 URL 不变, 不可 immutable — `Cache-Control: public, no-cache` + `content_hash` ETag. proxy 上游失败 502, 进程内负缓存 15 分钟 (不纳入配置), 同 URL singleflight; 刮削下载不经由该缓存.
 

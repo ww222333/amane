@@ -17,11 +17,11 @@
 
 `CLEANUP` / `UPSCALE` 扫描 DB / Resource; `ACTOR_SCRAPE` 刮人物; `R18_IMPORT` 导入 dump. 上述类型均不执行影片落盘.
 
-不允许 ScrapeHandler 或 Watcher 提交 ORGANIZE / DELETE — Watcher 只注册文件并入队 SCRAPE; 完整的扫描、刮削与落盘须提交 REFRESH, 再提交 ORGANIZE. ORGANIZE 可用 `priority=-1` 跟在刮削之后, 但该优先级不使 ORGANIZE 等待刮削完成: 当时尚未刮削完成的文件会被跳过, 须再次运行 ORGANIZE.
+ORGANIZE 的入队来源只有三处: API / Agent 提交, retry 重跑, 库开启自动整理后的链式后继; DELETE 同样只经 API / Agent 提交. Handler 内不许直接 `create_task`, 后继一律经 `TaskResult.followups` 进入完成事务. Watcher 只注册文件并按 `automation` 入队 SCRAPE, 完整的扫描与落盘仍须提交 REFRESH. 手动把 `priority=-1` 用在整理上**不**使它等待刮削完成: 当时尚未刮削完成的文件会被跳过, 须再次运行 ORGANIZE.
 
 ORGANIZE 只读取范围内的 `MediaFile` 行: 缺省为该库全部索引, 显式 `path` 按前缀过滤, `media_file_ids` 为勾选快照 (含其它库的 id 则 422); 后两者同时给出则 422. 库根必须是已存在的目录, 否则失败; `media_file_ids` 未给出且 path 为子目录时该子目录也必须存在 — 避免网络盘掉线时把选中行当失效索引删掉. 无 Metadata 的行与命中文件黑名单 / 最小视频大小 / 预告片规则的行跳过落盘; 路径落在 `.amane_trash` 内的行删除索引. SCAN_INVALID 的 `path` 同样可限定子目录. 整理默认与预告片跳过正则见 [data-model.md](data-model.md).
 
-入队互斥在 `create_task`: queued / running 的 ACTOR_SCRAPE 按 `payload.actor_id` 复用已有行; ORGANIZE 与 DELETE 每次提交都新建行, 禁止复用, 同库的二者共用 `LibraryTaskLocks` 在执行期串行 (都在同一棵树上动文件). 不同库 / 不同演员仍并行. API、Agent、链式入队、retry 都经由 `create_task`, Worker 不按类型加锁; 终态之后允许再入队; 互斥不比较 payload 其它字段. SQLite 默认 DEFERRED 事务里两个 session 的 SELECT 都会在写锁前看到空表, 因此检查与插入须在 Repository 上串行化 (单进程).
+入队互斥在 `create_task`: queued / running 的 ACTOR_SCRAPE 按 `payload.actor_id` 复用已有行; ORGANIZE 与 DELETE 每次提交都新建行, 禁止复用, 同库的二者共用 `LibraryTaskLocks` 在执行期串行 (都在同一棵树上动文件). 不同库 / 不同演员仍并行. API、Agent、链式入队、retry 都经由 `create_task`, Worker 不按类型加锁; 终态之后允许再入队; 互斥不比较 payload 其它字段. 检查与插入须在 Repository 上串行化 (单进程), 机制见 [database.md](database.md)「写入事务边界」.
 
 ## 任务图 (TaskLink)
 
@@ -59,9 +59,11 @@ SCRAPE **没有**「缓存命中即整体跳过爬取」的快速返回 — 完�
 
 ## TaskHandler 契约
 
-`src/amane/handlers/protocol.py::TaskHandler[P, R]` 用泛型固定 payload / result 类型. 入队 `payload.model_dump()` 序列化为 JSON, 出队 `model_validate(raw)` 还原并校验; payload 字段带默认值时旧 task 出队不会 KeyError, 字段约束 (range / enum) 在反序列化阶段拒绝并直接 `fail_task`.
+`src/amane/handlers/protocol.py::TaskHandler[P, R]` 用泛型固定 payload / result 类型. 入队 `model_dump(mode="json")` 序列化为 JSON, 出队 `model_validate(raw)` 还原并校验; payload 字段带默认值时旧 task 出队不会 KeyError, 字段约束 (range / enum) 在反序列化阶段拒绝并直接 `fail_task`.
 
 **约束**: 不允许重命名已持久化的 payload 字段, 否则队列中的旧 dict 无法还原; 新增字段必须带默认值.
+
+结果侧: 每个结果模型自带 `type` 字面量, 单条任务的结果按该字段判别 (联合定义在 `api/models/tasks.py`, 前端按 `result.type` 收窄). 结果由本进程按同一模型写入, 读不出来时不迁移也不猜字段: 详情响应里置空 (列表形状见 [api.md](api.md)). 落库前统一经 `TaskResult.as_dict` 按 JSON 模式 dump, 字段取值必须能被 JSON 模式 dump; dict 载荷不做转换, 须自带 JSON 原生值. 失败任务同样落库载荷 (`fail_task` / `fail_running_task` 都接 `result`): 刮削与演员刮削攒下站点明细后失败时带上它, 崩溃与取消由 `TaskHandler.failure_result` 补交 (含站点已上报而调度顺序尚未写入的抓取阶段); 取消落在 `handle()` 之外 (首次调度前, 或信号量等待 / `Recorder.begin` 期间 / 完成事务期间), 以及由 agent 工具与批量取消的兜底路径写入时, 都不经该钩子, 载荷为空. 新增结果模型须同时补 `tests/handlers/test_protocol.py` 的用例与 `api/models/tasks.py` 的联合 (漏了联合, 该类型的详情会静默置空).
 
 ### 进度上报
 
@@ -94,10 +96,10 @@ handler 之间复用的阶段逻辑, 不是一条可跳步的总管线:
 - **整理 = 复制到库路径**: 优先用 Resource 已有文件, 缺失才现场 `acquire`; 复制哪些类型由 `Library.copy_resources` (或 payload 覆盖) 决定 (见 [data-model.md](data-model.md)).
 - **封面角标**: `watermark.enabled` 时 poster / thumb 副本按源文件 FileInfo 叠 PNG; Resource 原图与 fanart 不修改.
 - **海报缺失**: 按 `scraping.crop_poster` 从已落盘 thumb 裁剪兜底.
-- **已就位**: 源与模板 dest 已是同一文件 (含硬链同一 inode) 时视为成功, 不追加 `(1)`; 碰撞改名只用于 dest 被另一文件占用.
+- **目标占用**: 判定分为四态: 空闲 / 已就位 / 被占用 / 无法判定. 源与目标已是同一文件 (含硬链同一 inode) 时视为就位, 不做任何改动; 被占用时跳过该文件, 不改名、不覆盖、不移动, 视频与字幕一视同仁, 由调用方按冲突记账, 冲突条目 (源路径 + 被占用的目标路径; 字幕冲突的 `path` 记字幕源路径, 不记视频源路径) 写进任务结果供界面显示, 且 `conflicts` 恒为 `conflicted` 条数的前缀 (差额只留在任务日志里), 冲突不自动解决, 未落盘的行留在源路径, 由用户自行处理. 无法判定 (stat 失败, 或两者在两次读取之间被替换) 按失败记账并带上 stat 的错误说明, 不得计入冲突或放宽为空闲. 存在性与占用判定都经 `existing_disk_path` (跟随符号链接; 读不出状态时按不存在处理, 不抛异常): 目标位置是断链符号链接时按空闲处理, MOVE 会替换它, SYMLINK 因 EEXIST 记失败. 判定与落盘之间还有窗口, MOVE / COPY 期间目标被外部写入仍会覆盖, 这条保证是尽力而为.
 - **链接**: `link_template` 非空时视频就位后在库外写 STRM 或符号链接, 指向这次整理后的路径; `MediaFile.path` 仍是真实视频. 链接写入失败时, 目标路径仍在本库内则回写 path, 任务记失败以便重试补链接.
 - **索引写回**: 整理后路径仍在本库内则更新 `MediaFile.path`; 已不在本库内且源路径不在磁盘上则删除该行. 不改 `library_id`, 不写其它库的行. 目标路径已被本库另一行占用时删除本行, 占用行缺少刮削字段则补上.
-- **失效索引**: 落盘前只对本次读到的行探活 (path 不存在或不在本库内则删除), 范围外的行不读取、不探活. 碰撞改名只检查磁盘, 范围内未删除的幽灵行仍会与带编号的目标路径在 UNIQUE 上冲突.
+- **失效索引**: 落盘前只对本次读到的行探活 (path 不存在或不在本库内则删除), 范围外的行不读取、不探活. 占用判定只看磁盘, 索引里有另一行指向同一路径不构成冲突.
 - **腾空目录**: payload 的 `prune_empty_dirs` (默认开) 为真且整理方式为移动时, 落盘后删除本次移动腾空的祖先目录. 自底向上, 只把 `ENOTEMPTY` 当作非空, 库根与 `.amane_trash` 不删; 复制 / 硬链接 / 符号链接不移走源文件, 不产生腾空目录. 删除与剪枝共用 `library/delete.py` 的执行单元 (字面路径边界, 不跟随符号链接, 不跨越挂载点).
 
 ## 清理清单
@@ -110,7 +112,7 @@ handler 之间复用的阶段逻辑, 不是一条可跳步的总管线:
 - **执行集合 ⊆ 清单**: `DELETE` 携带清单标识与排除项 / 纳入项; 标识不存在、已执行、库不一致或库根已变更即失败, 不重新扫描、不重新生成清单. 两者都按路径分量匹配, 相对路径按清单库根解释, 不匹配任何条目的忽略; 互为祖先时按最深的一条判定 (同深时纳入优先) — 面板用「排除一个目录 + 纳入其中一项」表达「保留这个目录, 但删掉里面的某一项」, 用户刚点的那条总是更深, 只按「纳入优先」判会让再深一层的取消勾选失效. 清单在取到同库锁之后、动第一个目标之前即置为已执行: 半执行的快照留在面板上只会显示一批磁盘上已经没有的条目, 重跑它既不会恢复已删的也不会补上没删的; 预检失败 (标识不存在 / 库不一致 / 库根变更 / 抢不到锁) 不置位, 一次都没动盘时重试仍然合理. 已执行的清单在面板侧等同于不存在, 而按标识查找仍返回它, 供执行侧区分「不存在」与「已执行过」.
 - **会变的事实在执行前复验**: 残留条目与空目录条目描述的事实 (目录里没有正片 / 目录是空的) 都会在清单的 24 小时有效期里失效, 因此执行前就地重算: 谓词复用 `library/cleanup/orphan.py`, 遍历另写在 `handlers/delete.py::_reverify_subtree`, 两处的判定顺序必须一致; 冷却期不参与复验. 残留条目按宿主容器的整棵子树加每一级祖先, 容器下的条目共用一次子树复验; 空目录条目只确认目录仍为空 (执行侧删目录是递归的). 不通过的条目不进删除集合, 按失败记账并单独计数 (`DeleteResult.reverify_rejected`); 目标已经不在磁盘上不算复验拒绝, 交给执行侧按「已不存在」记账. 只复验磁盘事实: 大小判定与库设置的变化不在其中, 设置改了应当重扫. 这是 `DELETE` 唯一会重算规则的路径, 其余条目只复验存在性与边界.
 - **展开提示**: 选中项展开把未能纳入的项作为码与参数 (`kind` / `path` / `count` / `detail`) 返回, 文案由面板按界面语言给出; 截断与未纳入数只走响应的 `truncated` / `dropped`.
-- **边界**: 目标须在清单记录的库根内, 没有例外 — 库外的一切 (链接模式下写在链接树的 strm 与产物) 既不进清单也不删除; 库根自身与 `.amane_trash` 自身 (含递归途中的该子树) 拒绝. 库内同时存在指向库外的符号链接时, 边界判定用字面路径, 不解析符号链接.
+- **边界**: 目标须在清单记录的库根内, 没有例外 — 库外的一切 (链接模式下写在链接树的 strm 与产物) 既不进清单也不删除; 库根自身与 `.amane_trash` 自身 (含递归途中的该子树) 拒绝. 库内同时存在指向库外的符号链接时, 边界判定用字面路径, 不解析符号链接. 目录链接 (Windows 的 junction 与挂载点) 是唯一的例外形态, 三处单独处理: 遍历与选中项展开不进入 (宿主目录因此不判定为残留, 只计入未登记候选); 执行前对非链接目标复核真实路径, 真实路径在库根外即拒绝; 扫描之后才出现在残留子树里的按复验拒绝.
 - **面板读取**: 状态接口只给状态与范围, 节点一律走 `inventory/nodes` 按 `offset`/`limit` 取一页 (顶层与下钻同一接口, 回收目录用响应里的 `path` 展开, 同一打开动作的重复请求复用上一次展开) — 一份清单可能有上万条候选, 整份下发会卡住面板. 清单内容生成后不变, 树因此只构建一次 (`library/cleanup/inventory.py::inventory_tree`). 节点路径一律 `/` 分隔, 面板按它做分量匹配; 折叠系统产物时 `has_children` 按过滤后的子节点算, 否则面板会给出展开后为空的行. 遍历设置与当前库配置不一致的清单按不存在处理: 它只覆盖了库的一部分, 面板不该照整库渲染. `will_be_empty` 由扫描自底向上算出, 而不是面板按清单条目推断 (有效媒体不是条目); 面板还要确认该子树里没有被排除的条目, 否则标记预告的是一个不会发生的结果.
 - **不加库列**: 清单与剪枝开关都只存在于任务 payload, 没有需要从库里取真值的读取路径.
 
@@ -126,7 +128,7 @@ handler 之间复用的阶段逻辑, 不是一条可跳步的总管线:
 
 ## 图像超分
 
-超分只在两处发生, serve 永不触发: scrape 期急切 (`sr.enabled` 时对低质本地副本) 与 UPSCALE 任务 (扫描 Resource, 补 `'sr' not in meta` 的低质图). **就地覆盖**: 不产生新 URL, 直接覆盖磁盘文件并在 `meta` 打 `'sr'`, 前端零感知; 预设只暴露两个, 屏蔽工具 / 模型 / 倍率; 二进制按需下到 `{data_dir}/tools/`.
+超分只在两处发生, serve 永不触发: scrape 期急切 (`sr.enabled` 时对低质本地副本) 与 UPSCALE 任务 (扫描 Resource, 补低质图); 跳过要求 `meta` 的 `'sr'` 标记存在且盘上字节未变, 变了则重跑并重记. **就地覆盖**: 不产生新 URL, 直接覆盖磁盘文件并在 `meta` 打 `'sr'`, 前端零感知; 预设只暴露两个, 屏蔽工具 / 模型 / 倍率; 二进制按需下到 `{data_dir}/tools/{tool}/{平台}-{架构}/`, 无可选包的目标在下载前即报错.
 
 ## Worker 并发
 
@@ -168,7 +170,7 @@ handler 之间复用的阶段逻辑, 不是一条可跳步的总管线:
 
 ## ACTOR_SCRAPE
 
-`ActorScrapeHandler` 按 `HotSettings.actor_scraping` 的资料来源 / 头像来源顺序获取 (见 [config.md](config.md)), **先按 `Actor.gender` 与各站 `profile().genders` 过滤** (`unknown` 只请求同时覆盖两性的站; 被裁站不发 HTTP、不消费其 raw 缓存). 站点内按查找名首命中; 聚合是标量填空 (含 `gender`, `unknown` 当空) + 头像优先, 无影片字段 DAG. `use_cache` 与影片同型: 含 `metadata` 时按**已允许**站复用 `Actor.raw` 跳过爬虫 (非法快照降级为重爬). 写回时再与库内已有人物字段填空合并, 避免冲掉已填值.
+`ActorScrapeHandler` 按 `HotSettings.actor_scraping` 的资料来源 / 头像来源顺序获取 (见 [config.md](config.md)), **先按 `Actor.gender` 与各站 `profile().genders` 过滤** (`unknown` 只请求同时覆盖两性的站; 被裁站不发 HTTP、不消费其 raw 缓存). 站点内按查找名首命中; 聚合是标量填空 (含 `gender`, `unknown` 当空) + 头像优先, 无影片字段 DAG. `use_cache` 与影片同型: 含 `metadata` 时按**已允许**站复用 `Actor.raw` 跳过爬虫 (非法快照降级为重爬), 且只决定是否重新爬取, 不改变写回规则. 写回以本次聚合结果为准, 空位取库内值, 锁定字段保留库内值; 参与且有结果的站点整段覆盖 `Actor.raw`, 未参与站点的快照保留; 别名并入别名行.
 
 **链式自动触发**: `actor_scraping.auto_scrape` 开启 (默认) 时, 影片 SCRAPE 成功后在 `ScrapeHandler` 末尾按清洗解析后的 `meta.actors` 查询 Actor 实体, **`Actor.raw` 非空 (已刮过) 则跳过**, 其余以 **`priority=-1`** 入队 (不抢占影片任务优先级); 同 `actor_id` 已有 queued / running 时复用入队互斥. 链式块内异常只记录 warning, 不阻断刮削主流程.
 
@@ -184,8 +186,17 @@ Metadata 是一等公民, CLEANUP **从不**因「无关联 MediaFile」删除 M
 
 三者分属独立循环 (秒级反应、分钟级 routine、每源间隔的远程拉取), 合并会互相拖高 latency.
 
-**UPSCALE 例行任务**: 扫描全部 `Resource`, 对低质且未超分的就地超分, `limit` 限单次批量.
+**UPSCALE 例行任务**: 扫描全部 `Resource`, 就地超分低质图, `limit` 限单次批量.
 
 **RESCRAPE (滚动补刮)**: 与 `RefreshHandler` 同构的 fan-out — 批量任务只选目标并下发既有刮削. `targets` (`metadata` / `actor`) 每个已选项各自取一批旧条目, 以 `priority=-1` 入队非 force 任务 (见 `handlers/rescrape.py`). 复用 per-site raw 快照仅补缺失站点, 聚合阶段重放当前配置, 因此同时承担「配置变更后再次运行生效」; 它与 SCRAPE 成功后的链式 ACTOR_SCRAPE 正交 (链式跳过 `Actor.raw` 已非空的演员).
 
-Watcher 的 `automation` 三档都不自动 ORGANIZE / DELETE, 归属随事件携带, 见 [watcher.md](watcher.md) / [data-model.md](data-model.md).
+Watcher 仍不自动 ORGANIZE / DELETE: 三档 `automation` 都不提交整理, 整理只来自刮削链或用户提交. 事件归属随事件携带, 见 [watcher.md](watcher.md) / [data-model.md](data-model.md).
+
+## 自动整理
+
+`Library.auto_organize` 与 `automation` 正交 (none / watch 下手动刮削同样触发), 默认关闭, 只影响新后继.
+
+- **触发**: SCRAPE 成功路径按 `payload.media_file_id` 追加一条 ORGANIZE 后继, 范围是这一个文件 (单元素 `media_file_ids`), `priority=-1` 仅表示不抢占交互提交的任务.
+- **次序**: 后继在父的完成事务里创建, 父此刻已是 DONE, 因此整理必然发生在该文件刮削完成之后 — 不需要批次屏障, 也不依赖优先级. 按番号刮削没有 `MediaFile` (库因而未知), 不整理.
+- **失败**: 刮削业务失败 / 崩溃 / 取消都不产生整理 (重试成功后仍会链出). 完成事务失败与后继构建失败这两条路径下文件同样停在「已刮削未落盘」, 开关开着也不会自愈, 需手动整理或重新刮削.
+- **读取**: 整理结果只在任务列表与任务结果里读. 整理是对文件集合的操作, 不是库的属性, 多次整理之间不构成先后关系, 因此库响应不设整理摘要.

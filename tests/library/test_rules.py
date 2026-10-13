@@ -10,6 +10,7 @@ from amane.library.rules import (
     TRASH_DIRNAME,
     compile_skip_patterns,
     fail_dir_for_scan,
+    has_companion_subtitle,
     is_in_fail_dir,
     is_in_trash,
     is_skipped_media,
@@ -220,3 +221,31 @@ def test_is_in_fail_dir_and_scan_helper() -> None:
     assert fail_dir_for_scan(fail_dir="_failed", exclude_fail_dir=True) == "_failed"
     assert fail_dir_for_scan(fail_dir="_failed", exclude_fail_dir=False) == ""
     assert fail_dir_for_scan(fail_dir="", exclude_fail_dir=True) == ""
+
+
+COMPANION_SUBTITLE_CASES = [
+    (["video.mp4", "video.srt"], [".srt"], "video.mp4", True),
+    (["video.mp4", "other.ass"], [".srt", ".ass"], "video.mp4", True),
+    (["video.mp4", "sub.SRT"], [".srt"], "video.mp4", True),
+    (["video.mp4", "video.ass"], [".SRT", ".ASS"], "video.mp4", True),
+    (["video.mp4", "video.txt"], [".srt"], "video.mp4", False),
+    (["video.mp4", "video.srt"], [], "video.mp4", False),
+    (["video.mp4", "video.srt"], ["srt"], "video.mp4", False),
+]
+
+
+@pytest.mark.parametrize(("names", "extensions", "video", "found"), COMPANION_SUBTITLE_CASES)
+def test_has_companion_subtitle(tmp_path: Path, names: list[str], extensions: list[str], video: str, found: bool):
+    for name in names:
+        (tmp_path / name).touch()
+    assert has_companion_subtitle.sync(tmp_path / video, extensions) is found
+
+
+def test_has_companion_subtitle_ignores_directories(tmp_path: Path):
+    (tmp_path / "video.mp4").touch()
+    (tmp_path / "nested.srt").mkdir()
+    assert has_companion_subtitle.sync(tmp_path / "video.mp4", [".srt"]) is False
+
+
+def test_has_companion_subtitle_missing_directory_is_false(tmp_path: Path):
+    assert has_companion_subtitle.sync(tmp_path / "gone" / "video.mp4", [".srt"]) is False

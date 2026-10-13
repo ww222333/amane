@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, override
+from typing import TYPE_CHECKING, Any, override
 
 from ...enums import ActorGender, SiteName
 from ...net.connectivity import ConnectivityOutcome, SkipReason, assess_response
@@ -6,47 +6,46 @@ from ...net.errors import FailureReason, RequestError
 from ...plugins.models import SourceTrait
 from ..base import Crawler, CrawlerProfile
 from ..models import FetchOptions, FilmActor, MediaMetadata, SearchQuery
+from ..parsing import fold_number, fold_studio, is_same_number, parse_western_number
+from .kin8 import movie_id as kin8_movie_id
 
 _PERFORMER_GENDER: dict[str, ActorGender] = {
     "FEMALE": ActorGender.FEMALE,
     "MALE": ActorGender.MALE,
 }
 
+# kin8 条目的 ``code`` 是站内 4 位 id, 补零规则只在 ``sites/kin8.py::movie_id`` 维护;
+# 他厂会用同一数字当番号, 因此该形态的命中必须同时限定片商.
+_KIN8_STUDIO = fold_studio("Kin8tengoku")
+
 if TYPE_CHECKING:
     from ...parsing.file_info import ContentType
 
-_SEARCH_QUERY = """
-query Search($term: String!) {
-  searchScene(term: $term) {
+_SCENE_FIELDS = """
     id title code date duration director details
     studio { name }
     tags { name }
     performers { as performer { name gender } }
     images { url }
-  }
-}"""
+"""
 
-_FINGERPRINT_QUERY = """
-query Find($hash: String!) {
-  findSceneByFingerprint(fingerprint: {hash: $hash, algorithm: OSHASH}) {
-    id title code date duration director details
-    studio { name }
-    tags { name }
-    performers { as performer { name gender } }
-    images { url }
-  }
-}"""
+_SEARCH_QUERY = f"""
+query Search($term: String!) {{
+  searchScene(term: $term) {{{_SCENE_FIELDS}
+  }}
+}}"""
 
-_FIND_BY_ID_QUERY = """
-query FindByID($id: ID!) {
-  findScene(id: $id) {
-    id title code date duration director details
-    studio { name }
-    tags { name }
-    performers { as performer { name gender } }
-    images { url }
-  }
-}"""
+_FINGERPRINT_QUERY = f"""
+query Find($hash: String!) {{
+  findSceneByFingerprint(fingerprint: {{hash: $hash, algorithm: OSHASH}}) {{{_SCENE_FIELDS}
+  }}
+}}"""
+
+_FIND_BY_ID_QUERY = f"""
+query FindByID($id: ID!) {{
+  findScene(id: $id) {{{_SCENE_FIELDS}
+  }}
+}}"""
 
 _TYPE_FILTER: dict[str, str] = {
     "censored": "JAV",
@@ -107,96 +106,44 @@ class ThePornDBCrawler(Crawler):
         return assess_response(url, resp)
 
     async def fetch(self, query: SearchQuery, options: FetchOptions | None = None) -> MediaMetadata | None:
+        """检索应答已含详情字段, 因此不必再按 id 取一次."""
         token = self.config.api_token if self.config else None
         if not token:
             return None
 
-        headers = {"Authorization": f"Bearer {token}"}
-        gql_url = self._gql_url(query.content_type)
-
-        # 优先 oshash 精确匹配.
-        if query.file_hash:
-            data = await self.client.post_json(
-                gql_url,
-                json={
-                    "query": _FINGERPRINT_QUERY,
-                    "variables": {"hash": query.file_hash},
-                },
-                headers=headers,
-            )
-            if data and isinstance(data, dict):
-                results = (data.get("data") or {}).get("findSceneByFingerprint", [])
-                if results:
-                    return self._scene_to_metadata(results[0])
-
-        # 文本搜索.
-        data = await self.client.post_json(
-            gql_url,
-            json={
-                "query": _SEARCH_QUERY,
-                "variables": {"term": query.number},
-            },
-            headers=headers,
-        )
-
-        if not data or not isinstance(data, dict):
-            return None
-
-        results = (data.get("data") or {}).get("searchScene", [])
-        if not results:
-            return None
-
-        # 精确匹配 code 优先.
-        number_lower = query.number.lower().replace("-", "")
-        best = min(
-            results,
-            key=lambda s: (
-                0 if s.get("code", "").lower().replace("-", "") == number_lower else 1,
-                -len(s.get("title") or ""),
-            ),
-        )
-        return self._scene_to_metadata(best)
+        scene = await self._search_scene(query, token)
+        return self._scene_to_metadata(scene) if scene is not None else None
 
     async def _search(self, query: SearchQuery, options: FetchOptions | None = None) -> str | None:
+        """与 ``fetch`` 共用检索流程与命中判据."""
         token = self.config.api_token if self.config else None
         if not token:
             return None
 
+        return _scene_url(await self._search_scene(query, token))
+
+    async def _search_scene(self, query: SearchQuery, token: str) -> dict[str, Any] | None:
+        """指纹优先于文本检索; 命中判据一律经 ``pick_scene``."""
         headers = {"Authorization": f"Bearer {token}"}
         gql_url = self._gql_url(query.content_type)
 
-        # 优先 oshash 精确匹配.
         if query.file_hash:
             data = await self.client.post_json(
                 gql_url,
-                json={
-                    "query": _FINGERPRINT_QUERY,
-                    "variables": {"hash": query.file_hash},
-                },
+                json={"query": _FINGERPRINT_QUERY, "variables": {"hash": query.file_hash}},
                 headers=headers,
             )
-            results = (data or {}).get("data", {}).get("findSceneByFingerprint", [])
-            if results:
-                return f"gql://scene/{results[0]['id']}"
+            results = _gql_field(data, "findSceneByFingerprint")
+            if isinstance(results, list) and results and isinstance(results[0], dict):
+                return results[0]
 
-        # 文本搜索.
         data = await self.client.post_json(
             gql_url,
-            json={
-                "query": _SEARCH_QUERY,
-                "variables": {"term": query.number},
-            },
+            # 检索词保留番号原样: kin8 的站前缀才是命中它的条件, 换成裸 ``movie_id`` 后 TPDB 返回 0 条.
+            json={"query": _SEARCH_QUERY, "variables": {"term": query.number}},
             headers=headers,
         )
-
-        results = (data or {}).get("data", {}).get("searchScene", [])
-        if results:
-            # 精确匹配 code 优先.
-            number_lower = query.number.lower().replace("-", "")
-            best = min(results, key=lambda s: (0 if s.get("code", "").lower().replace("-", "") == number_lower else 1,))
-            return f"gql://scene/{best['id']}"
-
-        return None
+        return pick_scene(_gql_field(data, "searchScene"), query.number)
 
     async def _scrape(self, url: str, options: FetchOptions | None = None) -> MediaMetadata | None:
         token = self.config.api_token if self.config else None
@@ -215,8 +162,8 @@ class ThePornDBCrawler(Crawler):
             headers=headers,
         )
 
-        scene = (data or {}).get("data", {}).get("findScene")
-        if not scene:
+        scene = _gql_field(data, "findScene")
+        if not isinstance(scene, dict):
             return None
         return self._scene_to_metadata(scene)
 
@@ -228,7 +175,7 @@ class ThePornDBCrawler(Crawler):
         return self.base_url
 
     @staticmethod
-    def _scene_to_metadata(scene: dict) -> MediaMetadata:
+    def _scene_to_metadata(scene: dict[str, Any]) -> MediaMetadata:
         number = scene.get("code") or scene.get("title", "")
 
         studio = None
@@ -255,7 +202,7 @@ class ThePornDBCrawler(Crawler):
             actors=actors,
             studio=studio,
             release=scene.get("date") or None,
-            runtime=scene.get("duration"),
+            runtime=_runtime_minutes(scene.get("duration")),
             tags=tags,
             directors=[scene["director"]] if scene.get("director") else [],
             plot=scene.get("details") or None,
@@ -263,3 +210,67 @@ class ThePornDBCrawler(Crawler):
             external_id=scene.get("id") or None,
             source_url=f"https://theporndb.net/scenes/{scene['id']}" if scene.get("id") else None,
         )
+
+
+def pick_scene(results: object, number: str) -> dict[str, Any] | None:
+    """检索结果 → 命中的条目; 确认不了返回 None, 不回退首条.
+
+    ``code`` 与入参按同一番号判定, 欧美日期号的两种年份写法等价, 命中取应答里的首条.
+    欧美条目的 ``code`` 是 ``studio:title-slug``, 与文件名番号不同构, 这类日期号按
+    片商 + 发布日期确认, 只认唯一命中. ``KIN8-####`` 按站内 4 位 id 判定.
+    """
+    scenes = [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
+    kin8_id = kin8_movie_id(number)
+    for scene in scenes:
+        code = scene.get("code")
+        if not isinstance(code, str) or not code:
+            continue
+        if is_same_number(code, number):
+            return scene
+        if kin8_id is not None and _is_kin8_scene(scene, code, kin8_id):
+            return scene
+
+    western = parse_western_number(number)
+    if western is None:
+        return None
+    hits = [
+        scene
+        for scene in scenes
+        if _scene_date(scene) == western.date and fold_studio(_scene_studio(scene)) == western.studio
+    ]
+    return hits[0] if len(hits) == 1 else None
+
+
+def _is_kin8_scene(scene: dict[str, Any], code: str, kin8_id: str) -> bool:
+    return fold_number(code) == kin8_id and fold_studio(_scene_studio(scene)) == _KIN8_STUDIO
+
+
+def _scene_studio(scene: dict[str, Any]) -> str:
+    studio = scene.get("studio")
+    name = studio.get("name") if isinstance(studio, dict) else None
+    return name if isinstance(name, str) else ""
+
+
+def _scene_date(scene: dict[str, Any]) -> str:
+    date = scene.get("date")
+    return date if isinstance(date, str) else ""
+
+
+def _runtime_minutes(duration: object) -> int | None:
+    """秒 → 分钟; 缺省与 0 视为没有时长."""
+    if isinstance(duration, bool) or not isinstance(duration, int) or duration <= 0:
+        return None
+    return duration // 60
+
+
+def _scene_url(scene: dict[str, Any] | None) -> str | None:
+    scene_id = scene.get("id") if scene is not None else None
+    return f"gql://scene/{scene_id}" if isinstance(scene_id, str) and scene_id else None
+
+
+def _gql_field(payload: object, key: str) -> object:
+    """取 GraphQL 应答的 ``data.<key>``; 结构不符返回 None."""
+    if not isinstance(payload, dict):
+        return None
+    data = payload.get("data")
+    return data.get(key) if isinstance(data, dict) else None

@@ -4,7 +4,7 @@
 
 优先使用现成 fixture, 不能自建引擎: `repo` / `resource_store` (`tests/conftest.py`) 已拷 head schema; HTTP 经由 `client` 或 `make_app` (`tests/api/conftest.py`), 后者会 `copy_schema` 并把 `worker.poll_interval` 压到配置下限.
 
-必须自开文件库时调用 `copy_schema` (`tests/schema_template.py`), 不能在每个测试里 `create_all` / Alembic. **例外**: 测迁移本身必须从空文件起步. GET `/config` 全量相等用 `hot_for_tests()`, 不能与裸 `HotSettings()` 比较 (夹具 poll 不是生产默认). 真文件系统的 watcher 集成把 `observer_timeout` / `check_interval` 收到 0.1 / 0.05, 否定断言用短 `wait_for(duration=…)`, 不能使用秒级 sleep.
+必须自开文件库时调用 `copy_schema` (`tests/schema_template.py`), 不能在每个测试里 `create_all` / Alembic. **例外**: 测迁移本身必须从空文件起步. GET `/config` 全量相等用 `hot_for_tests()`, 不能与裸 `HotSettings()` 比较 (夹具 poll 不是生产默认). 真文件系统的 watcher 集成把 `observer_timeout` / `check_interval` 收到 0.1 / 0.05; 否定断言用短 `wait_for(duration=…)`, 先后顺序用事件判据 (`tests/helpers.py::LoopProgressProbe`), 条件等待上限用 `tests/helpers.py::LOAD_TOLERANT_TIMEOUT`; 不能用 sleep 长短或真实耗时代替同步原语 — 超售的 CI runner 上单次事件循环轮转可达数百毫秒.
 
 ## 测试分层
 
@@ -38,3 +38,5 @@ CI 的 Windows job 仍执行全套 Python 测试 — 盘符、原生分隔符、
 | 写入再回读 | ORM / Pydantic 填字段、commit、断言还是那些字段. |
 
 必须覆盖: 校验拒绝与报错信息; 旧字段 / 迁移; DB 真正强制的唯一 / 检查约束; 解析 / 分类的边界与非法输入; 加枚举成员时必须补齐的 frozen-dict / 路由资格; 对外冻结的表面 (SDK 按 identity 再导出、capability 工具名集合). 路径拼接若只是 `data_dir / "config.toml"` 一句话, 也不能单开测试. 表测试优先; 合法路径之外必须有非法 / 空输入. 发现玩具测试直接删除, 不能改成「断言得更细的同一回声」.
+
+**不为 `scripts/` 下的脚本创建测试.** 它们由维护者手动运行, 没有对外契约, 内部结构可随时重写, 正确性只在真实运行中确认; 已有的测试等同「实现复述」, 直接删除.

@@ -405,8 +405,8 @@ class TestResolvePathsEdgeCases:
         result = resolve_paths(wp, meta, ext="")
 
         assert result.video.parent == media / "ABC-123"
-        # Windows ntpath.abspath 去掉文件名末尾的点; POSIX 保留 ``ABC-123.``.
-        assert result.video.name == ("ABC-123" if platform == "win32" else "ABC-123.")
+        # 段尾的点按 Windows 创建结果剥除, 各平台结果一致.
+        assert result.video.name == "ABC-123"
 
     def test_video_dir_computed_from_absolute_video(self, media: Path, other: Path):
         wp = Library(name="t", path=str(media), video_template=str(other / "{number}" / "{number}.{ext}"))
@@ -542,7 +542,6 @@ class TestPathTraversalProtection:
         assert result.thumb == media / "StudioX" / "ABC-123" / "thumb.jpg"
         assert result.nfo == media / "StudioX" / "ABC-123" / "ABC-123.nfo"
 
-    @pytest.mark.skipif(platform == "win32", reason="符号链接行为在 Windows 下不一致")
     def test_in_library_file_symlink_keeps_lexical_video_dir(self, media: Path):
         """dest 已是指向库内源文件的符号链接时, {video_dir} 仍是 dest 所在目录."""
         media.mkdir()
@@ -559,7 +558,6 @@ class TestPathTraversalProtection:
         assert result.thumb == dest_dir / "thumb.jpg"
         assert result.nfo == dest_dir / "ABC-123.nfo"
 
-    @pytest.mark.skipif(platform == "win32", reason="符号链接行为在 Windows 下不一致")
     def test_dir_symlink_escaping_library_rejected(self, media: Path, etc: Path):
         """库内目录项指向库外时, 相对模板跟随后逃逸, 拒绝."""
         media.mkdir()
@@ -569,7 +567,6 @@ class TestPathTraversalProtection:
         with pytest.raises(ValueError, match="路径越界"):
             resolve_paths(wp, _meta(), ext="mp4")
 
-    @pytest.mark.skipif(platform == "win32", reason="符号链接行为在 Windows 下不一致")
     def test_file_symlink_to_outside_rejected(self, media: Path, etc: Path):
         """dest 文件符号链接指向库外时拒绝."""
         media.mkdir()
@@ -676,6 +673,47 @@ class TestResolvePathsLink:
         )
         with pytest.raises(ValueError, match="库根之外"):
             resolve_paths(wp, _meta(), ext="mp4")
+
+    def test_existing_link_to_library_video_keeps_link_outside(self, media: Path, other: Path):
+        """库外链接文件已指向库内视频时, 它自身仍判为库外.
+
+        判定的是文件落在哪里, 不是它指向的视频; 否则再次整理会失败, 不满足幂等.
+        """
+        wp = Library(
+            name="t",
+            path=str(media),
+            video_template="{studio}/{number}/{number}.{ext}",
+            link_template=str(other / "{number}" / "{number}.{ext}"),
+            link_mode=LinkMode.SYMLINK,
+        )
+        first = resolve_paths(wp, _meta(), ext="mp4", safe_dirs=[other])
+        assert first.link is not None
+        first.video.parent.mkdir(parents=True)
+        first.video.write_bytes(b"video")
+        first.link.parent.mkdir(parents=True)
+        first.link.symlink_to(first.video)
+
+        second = resolve_paths(wp, _meta(), ext="mp4", safe_dirs=[other])
+        assert second.link is not None
+        assert second.link == first.link
+        assert second.link.resolve() == first.video.resolve()
+
+    def test_link_dir_symlink_into_library_rejected(self, media: Path, other: Path):
+        """链接父目录是指向库内的符号链接时仍拒绝: 判定完整解析父目录链."""
+        inside = media / "links"
+        inside.mkdir(parents=True)
+        into_library = other / "into_library"
+        into_library.parent.mkdir(parents=True, exist_ok=True)
+        into_library.symlink_to(inside, target_is_directory=True)
+        wp = Library(
+            name="t",
+            path=str(media),
+            video_template="{number}/{number}.{ext}",
+            link_template=str(into_library / "{number}.{ext}"),
+            link_mode=LinkMode.SYMLINK,
+        )
+        with pytest.raises(ValueError, match="库根之外"):
+            resolve_paths(wp, _meta(), ext="mp4", safe_dirs=[other])
 
     def test_subtitle_default_follows_link_dir(self, media: Path, other: Path):
         wp = Library(
@@ -954,6 +992,108 @@ def test_path_engine_keeps_path_anchor(case: _AnchorCase) -> None:
     """锚 (UNC 共享 / 盘符 / 根) 原样保留, 只折叠锚之后的空段."""
     rendered = PathEngine(case.template).render(TemplateContext.from_mapping(case.variables))
     assert rendered == case.expected
+
+
+class _SegmentCase(NamedTuple):
+    id: str
+    template: str
+    variables: dict[str, str]
+    expected: str
+
+
+# Windows 创建时: 段内控制字符 → ERROR_INVALID_NAME; 段尾的 . 与空格 → 静默剥除.
+SEGMENT_CASES: tuple[_SegmentCase, ...] = (
+    _SegmentCase(
+        "control-char-becomes-space",
+        "{title}/{number}.{ext}",
+        {"title": "line1\nline2", "number": "ABC-123", "ext": "mp4"},
+        "line1 line2/ABC-123.mp4",
+    ),
+    _SegmentCase(
+        "nul-and-del-become-space",
+        "{title}/{number}.{ext}",
+        {"title": "a\x00b\x7fc", "number": "ABC-123", "ext": "mp4"},
+        "a b c/ABC-123.mp4",
+    ),
+    _SegmentCase(
+        "field-trailing-dots-removed",
+        "{studio}/{number}/{number}.{ext}",
+        {"studio": "Studio...", "number": "ABC-123", "ext": "mp4"},
+        "Studio/ABC-123/ABC-123.mp4",
+    ),
+    _SegmentCase(
+        "literal-trailing-space-removed",
+        "{number} {title}/{number}.{ext}",
+        {"number": "ABC-123", "title": "", "ext": "mp4"},
+        "ABC-123/ABC-123.mp4",
+    ),
+    _SegmentCase(
+        "dots-only-segment-dropped",
+        "{title}/{number}.{ext}",
+        {"title": "...", "number": "ABC-123", "ext": "mp4"},
+        "ABC-123.mp4",
+    ),
+    _SegmentCase(
+        "file-stem-trailing-dot-removed",
+        "{number}.{ext}",
+        {"number": "ABC-123", "ext": ""},
+        "ABC-123",
+    ),
+    _SegmentCase(
+        "control-char-in-literal-becomes-space",
+        "a\x01b/{number}.{ext}",
+        {"number": "ABC-123", "ext": "mp4"},
+        "a b/ABC-123.mp4",
+    ),
+    _SegmentCase(
+        "leading-space-kept",
+        " {number}/{number}.{ext}",
+        {"number": "ABC-123", "ext": "mp4"},
+        " ABC-123/ABC-123.mp4",
+    ),
+    _SegmentCase(
+        "dot-segment-kept",
+        "{number}/./{number}.{ext}",
+        {"number": "ABC-123", "ext": "mp4"},
+        "ABC-123/./ABC-123.mp4",
+    ),
+    _SegmentCase(
+        "dotdot-segment-kept",
+        "{number}/../{number}.{ext}",
+        {"number": "ABC-123", "ext": "mp4"},
+        "ABC-123/../ABC-123.mp4",
+    ),
+)
+
+
+@pytest.mark.parametrize("case", SEGMENT_CASES, ids=lambda c: c.id)
+def test_path_engine_normalizes_each_segment(case: _SegmentCase) -> None:
+    """每个路径段按 Windows 创建结果对齐: 控制字符替换为空格, 段尾的 . 与空格去掉, 空段丢弃.
+
+    ``.`` 与 ``..`` 原样保留, 逃逸检查依赖它们.
+    """
+    rendered = PathEngine(case.template).render(TemplateContext.from_mapping(case.variables))
+    assert rendered == case.expected
+
+
+class TestSegmentSanitize:
+    """清洗结果就是落在磁盘上的名字: 目录段含控制字符或段尾的 . 时, 建目录不再失败或改名."""
+
+    def test_metadata_title_and_studio(self, media: Path):
+        wp = Library(name="t", path=str(media), video_template="{studio}/{number} {title}/{number}.{ext}")
+        result = resolve_paths(wp, _meta(title="line1\nline2...", studio="Studio..."), ext="mp4")
+
+        result.video.parent.mkdir(parents=True)
+        assert result.video.parent.is_dir()
+        assert [entry.name for entry in media.iterdir()] == ["Studio"]
+        assert result.video.parent.name == "ABC-123 line1 line2"
+
+    def test_raw_dir_from_source_path(self, media: Path):
+        """{raw_dir} 不经过字段清洗, 由路径段规范化兜底."""
+        wp = Library(name="t", path=str(media), video_template="{raw_dir}/{number}.{ext}")
+        result = resolve_paths(wp, _meta(), ext="mp4", source_path=media / "A\nB" / "C.mp4")
+
+        assert result.video == media / "A B" / "ABC-123.mp4"
 
 
 class _ActressCase(NamedTuple):

@@ -7,9 +7,9 @@ export type ClientOptions = {
 /**
  * ActorField
  *
- * 演员人物档案的可锁字段; 取值与 Actor 列名同形.
+ * 演员人物档案的可锁字段; 除 ``ALIASES`` 外取值与 Actor 列名同形.
  */
-export type ActorField = 'gender' | 'birthday' | 'birthplace' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'overview' | 'tagline' | 'image_urls';
+export type ActorField = 'gender' | 'birthday' | 'birthplace' | 'height' | 'bust' | 'waist' | 'hip' | 'cup' | 'overview' | 'tagline' | 'image_urls' | 'aliases';
 
 /**
  * ActorGender
@@ -163,6 +163,38 @@ export type ActorScrapeRequest = {
      * 启用的缓存种类 (metadata: 复用 Actor.raw; trans: 预留译文). 空集 = 全部强制刷新
      */
     use_cache?: Array<CacheKind>;
+};
+
+/**
+ * ActorScrapeResult
+ */
+export type ActorScrapeResult = {
+    /**
+     * Type
+     */
+    type?: 'actor_scrape';
+    /**
+     * Actor Id
+     */
+    actor_id: number;
+    /**
+     * Field Sources
+     */
+    field_sources: {
+        [key: string]: string;
+    };
+    /**
+     * Failed Sites
+     */
+    failed_sites: Array<string>;
+    /**
+     * Image Count
+     */
+    image_count: number;
+    /**
+     * Outcomes
+     */
+    outcomes?: Array<SiteOutcomeRecord>;
 };
 
 /**
@@ -592,6 +624,24 @@ export type CancelledRow = {
 };
 
 /**
+ * CleanupResult
+ */
+export type CleanupResult = {
+    /**
+     * Type
+     */
+    type?: 'cleanup';
+    /**
+     * Files Removed
+     */
+    files_removed: number;
+    /**
+     * Resources Removed
+     */
+    resources_removed: number;
+};
+
+/**
  * CleanupSubmission
  */
 export type CleanupSubmission = {
@@ -846,6 +896,52 @@ export type CropPosterRequest = {
 };
 
 /**
+ * DeleteResult
+ */
+export type DeleteResult = {
+    /**
+     * Type
+     */
+    type?: 'delete';
+    /**
+     * Deleted
+     */
+    deleted: number;
+    /**
+     * Changed
+     */
+    changed: number;
+    /**
+     * Failed
+     */
+    failed: number;
+    /**
+     * Freed Bytes
+     */
+    freed_bytes?: number;
+    /**
+     * Hardlink Items
+     */
+    hardlink_items?: number;
+    /**
+     * Pruned Dirs
+     */
+    pruned_dirs?: number;
+    /**
+     * Excluded
+     */
+    excluded?: number;
+    /**
+     * Indexed
+     */
+    indexed?: number;
+    /**
+     * Reverify Rejected
+     */
+    reverify_rejected?: number;
+};
+
+/**
  * DeleteSubmission
  */
 export type DeleteSubmission = {
@@ -935,6 +1031,60 @@ export type ErrorRow = {
 };
 
 /**
+ * FacetBatchAction
+ *
+ * 分类批量动作; 两个动作都是整体赋值且幂等.
+ *
+ * 不设逐项取反 (toggle): 多选混合态下点「收藏」必须保持收藏, 取反会取消已收藏的条目. 枚举是
+ * 动作信封的扩展位, 新增动作 (如批量删除) 时 ``FacetBatchResponse`` 的字段按动作解释.
+ */
+export type FacetBatchAction = 'favorite' | 'unfavorite';
+
+/**
+ * FacetBatchRequest
+ *
+ * 对一批分类执行同一个动作; 重复 id 去重, 使结果计数以去重后的条目数为准.
+ */
+export type FacetBatchRequest = {
+    /**
+     * Facet Ids
+     *
+     * 分类 ID 列表
+     */
+    facet_ids: Array<number>;
+    /**
+     * favorite 置为已收藏, unfavorite 置为未收藏; 两者均幂等
+     */
+    action: FacetBatchAction;
+};
+
+/**
+ * FacetBatchResponse
+ *
+ * 批量动作的结果计数, 字段按 action 解释; 两个已实现动作下三者之和等于去重后的条目数.
+ */
+export type FacetBatchResponse = {
+    /**
+     * Changed
+     *
+     * 收藏位确实发生写入的分类数
+     */
+    changed: number;
+    /**
+     * Unchanged
+     *
+     * 已处于目标取值的分类数
+     */
+    unchanged: number;
+    /**
+     * Missing
+     *
+     * 不存在的分类 id 数
+     */
+    missing: number;
+};
+
+/**
  * FacetKind
  */
 export type FacetKind = 'actor' | 'director' | 'tag' | 'studio' | 'publisher' | 'series' | 'user_tag';
@@ -997,6 +1147,10 @@ export type FacetResponse = {
      * Count
      */
     count: number;
+    /**
+     * Is Favorite
+     */
+    is_favorite: boolean;
 };
 
 /**
@@ -1730,7 +1884,7 @@ export type Language = 'zh_cn' | 'zh_tw' | 'jp' | 'en';
 /**
  * LibraryAutomation
  *
- * 媒体库自动化级别. 含更低级别的行为; 自动整理尚未开放.
+ * 媒体库自动化级别 (只控制发现侧). 含更低级别的行为; 自动整理由 `Library.auto_organize` 单独控制.
  */
 export type LibraryAutomation = 'none' | 'watch' | 'scrape';
 
@@ -1747,6 +1901,10 @@ export type LibraryCreateRequest = {
      */
     path: string;
     automation?: LibraryAutomation;
+    /**
+     * Auto Organize
+     */
+    auto_organize?: boolean;
     ingest?: LibraryIngest;
     /**
      * Cloud Path
@@ -1882,6 +2040,10 @@ export type LibraryResponse = {
      */
     path: string;
     automation: LibraryAutomation;
+    /**
+     * Auto Organize
+     */
+    auto_organize: boolean;
     ingest: LibraryIngest;
     /**
      * Cloud Path
@@ -1992,6 +2154,10 @@ export type LibraryUpdateRequest = {
      */
     path?: string | null;
     automation?: LibraryAutomation | null;
+    /**
+     * Auto Organize
+     */
+    auto_organize?: boolean | null;
     ingest?: LibraryIngest | null;
     /**
      * Cloud Path
@@ -2741,6 +2907,64 @@ export type OptionalPathTemplateDefaults = {
 };
 
 /**
+ * OrganizeConflict
+ *
+ * 一条未落盘的整理项: 源路径 + 被占用的目标路径.
+ */
+export type OrganizeConflict = {
+    /**
+     * Path
+     */
+    path: string;
+    /**
+     * Target
+     */
+    target: string;
+    reason: OrganizeConflictReason;
+};
+
+/**
+ * OrganizeConflictReason
+ *
+ * 整理未处理的原因.
+ */
+export type OrganizeConflictReason = 'target_exists' | 'subtitle_target_exists';
+
+/**
+ * OrganizeResult
+ */
+export type OrganizeResult = {
+    /**
+     * Type
+     */
+    type?: 'organize';
+    /**
+     * Organized
+     */
+    organized: number;
+    /**
+     * Skipped
+     */
+    skipped: number;
+    /**
+     * Conflicted
+     */
+    conflicted: number;
+    /**
+     * Failed
+     */
+    failed: number;
+    /**
+     * Pruned Dirs
+     */
+    pruned_dirs: number;
+    /**
+     * Conflicts
+     */
+    conflicts: Array<OrganizeConflict>;
+};
+
+/**
  * OrganizeSubmission
  */
 export type OrganizeSubmission = {
@@ -3097,6 +3321,24 @@ export type R18Config = {
 };
 
 /**
+ * R18ImportResult
+ */
+export type R18ImportResult = {
+    /**
+     * Type
+     */
+    type?: 'r18_import';
+    /**
+     * Imported
+     */
+    imported: boolean;
+    /**
+     * Etag
+     */
+    etag?: string | null;
+};
+
+/**
  * R18ImportSubmission
  */
 export type R18ImportSubmission = {
@@ -3136,6 +3378,28 @@ export type ReasoningDeltaRow = {
      * Text
      */
     text: string;
+};
+
+/**
+ * RefreshResult
+ */
+export type RefreshResult = {
+    /**
+     * Type
+     */
+    type?: 'refresh';
+    /**
+     * Added
+     */
+    added: number;
+    /**
+     * Removed
+     */
+    removed: number;
+    /**
+     * Scrape
+     */
+    scrape: number;
 };
 
 /**
@@ -3253,6 +3517,28 @@ export type RequestUsageRow = {
      */
     type: 'request_usage';
     usage: RequestTokenUsage;
+};
+
+/**
+ * RescrapeResult
+ */
+export type RescrapeResult = {
+    /**
+     * Type
+     */
+    type?: 'rescrape';
+    /**
+     * Submitted
+     */
+    submitted: number;
+    /**
+     * Metadata
+     */
+    metadata?: number;
+    /**
+     * Actors
+     */
+    actors?: number;
 };
 
 /**
@@ -3462,6 +3748,48 @@ export type SavedQueryUpdateRequest = {
 };
 
 /**
+ * ScanInvalidResult
+ */
+export type ScanInvalidResult = {
+    /**
+     * Type
+     */
+    type?: 'scan_invalid';
+    /**
+     * Inventory Id
+     */
+    inventory_id: string;
+    /**
+     * Entries
+     */
+    entries: number;
+    /**
+     * Dirs
+     */
+    dirs: number;
+    /**
+     * Scope Path
+     */
+    scope_path?: string | null;
+    /**
+     * Truncated
+     */
+    truncated?: boolean;
+    /**
+     * Skipped Dirs
+     */
+    skipped_dirs?: number;
+    /**
+     * Skipped Files
+     */
+    skipped_files?: number;
+    /**
+     * Blocked Dirs
+     */
+    blocked_dirs?: number;
+};
+
+/**
  * ScanInvalidSubmission
  */
 export type ScanInvalidSubmission = {
@@ -3603,6 +3931,34 @@ export type ScheduleUpdateRequest = {
      * Enabled
      */
     enabled?: boolean | null;
+};
+
+/**
+ * ScrapeResult
+ */
+export type ScrapeResult = {
+    /**
+     * Type
+     */
+    type?: 'scrape';
+    /**
+     * Metadata Id
+     */
+    metadata_id?: number | null;
+    /**
+     * Field Sources
+     */
+    field_sources: {
+        [key: string]: string;
+    };
+    /**
+     * Failed Sites
+     */
+    failed_sites: Array<string>;
+    /**
+     * Outcomes
+     */
+    outcomes?: Array<SiteOutcomeRecord>;
 };
 
 /**
@@ -3774,6 +4130,10 @@ export type SiteConfig = {
      * Use Proxy
      */
     use_proxy?: boolean;
+    /**
+     * Proxy
+     */
+    proxy?: string | null;
     use_browser?: BrowserMode;
     browser_backend?: BrowserBackendName | null;
     /**
@@ -3796,6 +4156,12 @@ export type SiteConfig = {
      * Rate Limit
      */
     rate_limit?: number | null;
+    /**
+     * Languages
+     *
+     * 词条语言优先级, 依序取第一个有正文的词条
+     */
+    languages?: Array<'zh' | 'ja' | 'en'>;
 };
 
 /**
@@ -3830,6 +4196,10 @@ export type SiteOutcomeRecord = {
      * Detail
      */
     detail?: string | null;
+    /**
+     * Detail Truncated
+     */
+    detail_truncated?: boolean;
 };
 
 /**
@@ -3837,7 +4207,7 @@ export type SiteOutcomeRecord = {
  *
  * ``SKIPPED`` 的原因.
  *
- * 与 ``FailureReason`` 分开: 这一档不是失败, 文案也不进任务报告. 界面按它本地化, 因此每种原因
+ * 与 ``FailureReason`` 分开: 这一档不是失败, 文案也不进站点明细. 界面按它本地化, 因此每种原因
  * 都要能独立读懂, 不依赖 ``detail``.
  */
 export type SkipReason = 'unknown_source' | 'no_http_upstream' | 'missing_credential' | 'undeclared' | 'no_url';
@@ -3993,23 +4363,9 @@ export type TaskBatchResponse = {
 };
 
 /**
- * TaskChildListResponse
+ * TaskChildItem
  */
-export type TaskChildListResponse = {
-    /**
-     * Items
-     */
-    items: Array<TaskChildResponse>;
-    /**
-     * Total
-     */
-    total: number;
-};
-
-/**
- * TaskChildResponse
- */
-export type TaskChildResponse = {
+export type TaskChildItem = {
     /**
      * Id
      */
@@ -4020,18 +4376,6 @@ export type TaskChildResponse = {
      * Title
      */
     title?: string | null;
-    /**
-     * Payload
-     */
-    payload?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Result
-     */
-    result?: {
-        [key: string]: unknown;
-    } | null;
     /**
      * Error
      */
@@ -4076,6 +4420,20 @@ export type TaskChildResponse = {
 };
 
 /**
+ * TaskChildListResponse
+ */
+export type TaskChildListResponse = {
+    /**
+     * Items
+     */
+    items: Array<TaskChildItem>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
  * TaskChildStatusCounts
  *
  * 直接后继按状态计数. 四字段之和等于 child_count.
@@ -4100,47 +4458,11 @@ export type TaskChildStatusCounts = {
 };
 
 /**
- * TaskListResponse
- */
-export type TaskListResponse = {
-    /**
-     * Items
-     */
-    items: Array<TaskResponse>;
-    /**
-     * Total
-     */
-    total: number;
-};
-
-/**
- * TaskReport
+ * TaskListItem
  *
- * outcomes 与 summary.json 同一结构.
+ * 列表与树: 不含 payload 与 result 等重字段, 展开时再取详情.
  */
-export type TaskReport = {
-    /**
-     * Headline
-     */
-    headline?: string | null;
-    /**
-     * Metadata Id
-     */
-    metadata_id?: number | null;
-    /**
-     * Actor Id
-     */
-    actor_id?: number | null;
-    /**
-     * Outcomes
-     */
-    outcomes?: Array<SiteOutcomeRecord>;
-};
-
-/**
- * TaskResponse
- */
-export type TaskResponse = {
+export type TaskListItem = {
     /**
      * Id
      */
@@ -4151,18 +4473,6 @@ export type TaskResponse = {
      * Title
      */
     title?: string | null;
-    /**
-     * Payload
-     */
-    payload?: {
-        [key: string]: unknown;
-    };
-    /**
-     * Result
-     */
-    result?: {
-        [key: string]: unknown;
-    } | null;
     /**
      * Error
      */
@@ -4200,6 +4510,105 @@ export type TaskResponse = {
      * Finished At
      */
     finished_at?: string | null;
+};
+
+/**
+ * TaskListResponse
+ */
+export type TaskListResponse = {
+    /**
+     * Items
+     */
+    items: Array<TaskListItem>;
+    /**
+     * Total
+     */
+    total: number;
+};
+
+/**
+ * TaskResponse
+ *
+ * 详情: 额外带 payload 与按类型的 result.
+ */
+export type TaskResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    type: TaskType;
+    status: TaskStatus;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Error
+     */
+    error?: string | null;
+    /**
+     * Log File
+     */
+    log_file?: string | null;
+    /**
+     * Retries
+     */
+    retries?: number;
+    /**
+     * Priority
+     */
+    priority?: number;
+    /**
+     * Root Task Id
+     */
+    root_task_id?: number | null;
+    /**
+     * Child Count
+     */
+    child_count?: number;
+    child_status?: TaskChildStatusCounts;
+    /**
+     * Created At
+     */
+    created_at?: string | null;
+    /**
+     * Started At
+     */
+    started_at?: string | null;
+    /**
+     * Finished At
+     */
+    finished_at?: string | null;
+    /**
+     * Payload
+     */
+    payload?: {
+        [key: string]: unknown;
+    };
+    /**
+     * Result
+     */
+    result?: ({
+        type: 'refresh';
+    } & RefreshResult) | ({
+        type: 'organize';
+    } & OrganizeResult) | ({
+        type: 'scan_invalid';
+    } & ScanInvalidResult) | ({
+        type: 'delete';
+    } & DeleteResult) | ({
+        type: 'scrape';
+    } & ScrapeResult) | ({
+        type: 'cleanup';
+    } & CleanupResult) | ({
+        type: 'upscale';
+    } & UpscaleResult) | ({
+        type: 'r18_import';
+    } & R18ImportResult) | ({
+        type: 'actor_scrape';
+    } & ActorScrapeResult) | ({
+        type: 'rescrape';
+    } & RescrapeResult) | null;
 };
 
 /**
@@ -4392,6 +4801,32 @@ export type TurnUsageRow = {
      */
     type: 'turn_usage';
     usage: TurnTokenUsage;
+};
+
+/**
+ * UpscaleResult
+ */
+export type UpscaleResult = {
+    /**
+     * Type
+     */
+    type?: 'upscale';
+    /**
+     * Scanned
+     */
+    scanned: number;
+    /**
+     * Upscaled
+     */
+    upscaled: number;
+    /**
+     * Skipped
+     */
+    skipped: number;
+    /**
+     * Failed
+     */
+    failed: number;
 };
 
 /**
@@ -6421,6 +6856,12 @@ export type ListFacetsData = {
          */
         search?: string | null;
         /**
+         * Favorite
+         *
+         * Filter by favorite marker
+         */
+        favorite?: boolean | null;
+        /**
          * Offset
          */
         offset?: number;
@@ -6515,6 +6956,33 @@ export type DeleteFacetRuleResponses = {
 };
 
 export type DeleteFacetRuleResponse = DeleteFacetRuleResponses[keyof DeleteFacetRuleResponses];
+
+export type BatchFacetsData = {
+    body: FacetBatchRequest;
+    path: {
+        kind: FacetKind;
+    };
+    query?: never;
+    url: '/api/facets/{kind}/batch';
+};
+
+export type BatchFacetsErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type BatchFacetsError = BatchFacetsErrors[keyof BatchFacetsErrors];
+
+export type BatchFacetsResponses = {
+    /**
+     * Successful Response
+     */
+    200: FacetBatchResponse;
+};
+
+export type BatchFacetsResponse = BatchFacetsResponses[keyof BatchFacetsResponses];
 
 export type DeleteFacetData = {
     body?: never;
@@ -7544,36 +8012,6 @@ export type GetTaskResponses = {
 };
 
 export type GetTaskResponse = GetTaskResponses[keyof GetTaskResponses];
-
-export type GetTaskReportData = {
-    body?: never;
-    path: {
-        /**
-         * Task Id
-         */
-        task_id: number;
-    };
-    query?: never;
-    url: '/api/tasks/{task_id}/report';
-};
-
-export type GetTaskReportErrors = {
-    /**
-     * Validation Error
-     */
-    422: HttpValidationError;
-};
-
-export type GetTaskReportError = GetTaskReportErrors[keyof GetTaskReportErrors];
-
-export type GetTaskReportResponses = {
-    /**
-     * Successful Response
-     */
-    200: TaskReport;
-};
-
-export type GetTaskReportResponse = GetTaskReportResponses[keyof GetTaskReportResponses];
 
 export type GetTaskRecordData = {
     body?: never;

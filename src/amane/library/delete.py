@@ -4,7 +4,9 @@
 不推导调用方未给出的路径 — 清单之外的路径一律拒绝.
 
 边界判定使用字面路径 (``path_is_under``), 基准是调用方给出的库根, 不是当前库设置:
-库内可能存在指向库外的符号链接, 解析符号链接会把库外内容纳入范围.
+库内可能存在指向库外的符号链接, 解析符号链接会把库外内容纳入范围. 符号链接以外的目标
+另按真实路径复核一次 (``resolved_path``): 目录链接 (Windows 的 junction 与挂载点) 在枚举与
+删除里都当普通目录处理, 字面路径判定拦不到它里面指向库外的内容.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from typing import Literal
 
 import structlog
 
-from ..utils.path import existing_disk_path, path_is_under
+from ..utils.path import existing_disk_path, path_is_under, resolved_path
 from ..utils.threads import in_thread
 from .rules import TRASH_DIRNAME
 
@@ -109,10 +111,18 @@ def delete_target(path: Path, *, library_root: Path) -> DeleteOutcome:
         logger.warning("delete refused", path=str(disk_path), reason=refusal)
         return DeleteOutcome(status="failed", error=refusal)
 
+    # 符号链接按字面路径删除链接自身, 真实路径在哪里都不影响; 其余目标按真实路径复核一次.
+    is_link = disk_path.is_symlink()
+    if not is_link:
+        resolved_refusal = _resolved_refusal(disk_path, library_root=library_root)
+        if resolved_refusal is not None:
+            logger.warning("delete refused", path=str(disk_path), reason=resolved_refusal)
+            return DeleteOutcome(status="failed", error=resolved_refusal)
+
     files: list[DeletedFile] = []
     try:
         # 先判符号链接: 断链链接正是要删除的对象, 而 is_dir 会跟随目标.
-        if disk_path.is_symlink():
+        if is_link:
             disk_path.unlink()
         elif disk_path.is_dir():
             _remove_tree(disk_path, files)
@@ -241,6 +251,18 @@ def _refuse_reason(target: Path, *, library_root: Path) -> str | None:
     if path_is_under(target, library_root):
         return None
     return f"outside library root: {target}"
+
+
+def _resolved_refusal(target: Path, *, library_root: Path) -> str | None:
+    """目标的真实路径是否落在库根的真实路径内.
+
+    字面路径在库内、真实路径在库外只可能来自路径中的目录链接: 它把路径引到别处, 而字面比较
+    看不出这一点. 两侧都取真实路径比较, 库路径自身是别名时同样成立.
+    """
+    real_target = resolved_path(target)
+    if path_is_under(real_target, resolved_path(library_root)):
+        return None
+    return f"resolved path outside library root: {target} -> {real_target}"
 
 
 def same_path(left: Path, right: Path) -> bool:

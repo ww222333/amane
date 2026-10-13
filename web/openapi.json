@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Amane API",
-    "version": "1.0.14"
+    "version": "0.20.0"
   },
   "paths": {
     "/api/health": {
@@ -2268,59 +2268,6 @@
         }
       }
     },
-    "/api/plugins/{plugin_id}/test": {
-      "post": {
-        "tags": [
-          "plugins"
-        ],
-        "summary": "Test Plugin",
-        "description": "用当前 (可覆盖) 配置构造临时 provider 并调用 ``test``; 不写配置、不入队任务.",
-        "operationId": "test_plugin",
-        "parameters": [
-          {
-            "name": "plugin_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Plugin Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PluginTestRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PluginTestResponse"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/plugins/{plugin_id}": {
       "get": {
         "tags": [
@@ -3089,7 +3036,7 @@
           "actors"
         ],
         "summary": "Clear Actor Person",
-        "description": "清空人物档案并解除全部锁 (保留 name / gender / 刮削缓存).",
+        "description": "清空人物档案与刮削缓存并解除全部锁 (保留 name / gender).",
         "operationId": "clear_actor_person",
         "parameters": [
           {
@@ -3313,6 +3260,24 @@
             }
           },
           {
+            "name": "favorite",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Filter by favorite marker",
+              "title": "Favorite"
+            },
+            "description": "Filter by favorite marker"
+          },
+          {
             "name": "offset",
             "in": "query",
             "required": false,
@@ -3453,6 +3418,58 @@
         "responses": {
           "204": {
             "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/facets/{kind}/batch": {
+      "post": {
+        "tags": [
+          "facets"
+        ],
+        "summary": "Batch Facets",
+        "description": "对一批分类执行同一个动作, 单个事务; 分类不支持收藏返回 400.\n\n不存在的 id 计入 ``missing`` 而不报 404 — 批量请求里某个 id 已失效不该让整批无结果. 动作语义\n与扩展位见 ``FacetBatchAction``.",
+        "operationId": "batch_facets",
+        "parameters": [
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/FacetKind"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FacetBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FacetBatchResponse"
+                }
+              }
+            }
           },
           "422": {
             "description": "Validation Error",
@@ -5152,49 +5169,6 @@
         }
       }
     },
-    "/api/tasks/{task_id}/report": {
-      "get": {
-        "tags": [
-          "tasks"
-        ],
-        "summary": "Get Task Report",
-        "description": "面向 UI 的投影, 非完整记录导出. 仅终态可用.",
-        "operationId": "get_task_report",
-        "parameters": [
-          {
-            "name": "task_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Task Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/TaskReport"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/api/tasks/{task_id}/record": {
       "get": {
         "tags": [
@@ -6188,10 +6162,11 @@
           "cup",
           "overview",
           "tagline",
-          "image_urls"
+          "image_urls",
+          "aliases"
         ],
         "title": "ActorField",
-        "description": "演员人物档案的可锁字段; 取值与 Actor 列名同形."
+        "description": "演员人物档案的可锁字段; 除 ``ALIASES`` 外取值与 Actor 列名同形."
       },
       "ActorGender": {
         "type": "string",
@@ -6452,6 +6427,53 @@
         },
         "type": "object",
         "title": "ActorScrapeRequest"
+      },
+      "ActorScrapeResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "actor_scrape",
+            "title": "Type",
+            "default": "actor_scrape"
+          },
+          "actor_id": {
+            "type": "integer",
+            "title": "Actor Id"
+          },
+          "field_sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Field Sources"
+          },
+          "failed_sites": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Failed Sites"
+          },
+          "image_count": {
+            "type": "integer",
+            "title": "Image Count"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/SiteOutcomeRecord"
+            },
+            "type": "array",
+            "title": "Outcomes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "actor_id",
+          "field_sources",
+          "failed_sites",
+          "image_count"
+        ],
+        "title": "ActorScrapeResult"
       },
       "ActorScrapeSubmission": {
         "properties": {
@@ -7260,6 +7282,30 @@
         "title": "CancelledRow",
         "description": "回合被显式终止."
       },
+      "CleanupResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "cleanup",
+            "title": "Type",
+            "default": "cleanup"
+          },
+          "files_removed": {
+            "type": "integer",
+            "title": "Files Removed"
+          },
+          "resources_removed": {
+            "type": "integer",
+            "title": "Resources Removed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "files_removed",
+          "resources_removed"
+        ],
+        "title": "CleanupResult"
+      },
       "CleanupSubmission": {
         "properties": {
           "remove_missing_files": {
@@ -7536,56 +7582,6 @@
         "title": "ConnectivityStatus",
         "description": "一次探测的结论. ``SKIPPED`` 是该来源本次不探测, 不是失败."
       },
-      "ContentRouteEntry": {
-        "properties": {
-          "sites": {
-            "items": {
-              "type": "string",
-              "enum": [
-                "airav",
-                "avbase",
-                "avsox",
-                "dahlia",
-                "dmm",
-                "faleno",
-                "fc2",
-                "fc2club",
-                "fc2ppvdb",
-                "freejavbt",
-                "getchu",
-                "giga",
-                "iqqtv",
-                "jav321",
-                "javbus",
-                "javdb",
-                "javlibrary",
-                "kin8",
-                "mgstage",
-                "official",
-                "prestige",
-                "r18dev",
-                "theporndb",
-                "xcity"
-              ]
-            },
-            "type": "array",
-            "title": "",
-            "description": "",
-            "x-ordered": true
-          },
-          "prefixes": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "自定义前缀",
-            "description": "匹配此前缀时优先使用本类型站点列表（如 MIDV、ABC-）；长前缀优先"
-          }
-        },
-        "type": "object",
-        "title": "ContentRouteEntry",
-        "description": "单个内容类型的路由: 站点名单 + 可选自定义前缀."
-      },
       "ContentType": {
         "type": "string",
         "enum": [
@@ -7595,9 +7591,7 @@
           "western",
           "fc2",
           "amateur",
-          "hentai",
-          "manju",
-          "unknown"
+          "hentai"
         ],
         "title": "ContentType"
       },
@@ -7674,6 +7668,65 @@
         ],
         "title": "CropPosterRequest",
         "description": "从封面图按像素框裁切海报 (相对 thumb 当前本地文件像素; 含就地超分后尺寸)."
+      },
+      "DeleteResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "delete",
+            "title": "Type",
+            "default": "delete"
+          },
+          "deleted": {
+            "type": "integer",
+            "title": "Deleted"
+          },
+          "changed": {
+            "type": "integer",
+            "title": "Changed"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "freed_bytes": {
+            "type": "integer",
+            "title": "Freed Bytes",
+            "default": 0
+          },
+          "hardlink_items": {
+            "type": "integer",
+            "title": "Hardlink Items",
+            "default": 0
+          },
+          "pruned_dirs": {
+            "type": "integer",
+            "title": "Pruned Dirs",
+            "default": 0
+          },
+          "excluded": {
+            "type": "integer",
+            "title": "Excluded",
+            "default": 0
+          },
+          "indexed": {
+            "type": "integer",
+            "title": "Indexed",
+            "default": 0
+          },
+          "reverify_rejected": {
+            "type": "integer",
+            "title": "Reverify Rejected",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "deleted",
+          "changed",
+          "failed"
+        ],
+        "title": "DeleteResult"
       },
       "DeleteSubmission": {
         "properties": {
@@ -7793,6 +7846,66 @@
         "title": "ErrorRow",
         "description": "回合异常; 文案直接进助手气泡."
       },
+      "FacetBatchAction": {
+        "type": "string",
+        "enum": [
+          "favorite",
+          "unfavorite"
+        ],
+        "title": "FacetBatchAction",
+        "description": "分类批量动作; 两个动作都是整体赋值且幂等.\n\n不设逐项取反 (toggle): 多选混合态下点「收藏」必须保持收藏, 取反会取消已收藏的条目. 枚举是\n动作信封的扩展位, 新增动作 (如批量删除) 时 ``FacetBatchResponse`` 的字段按动作解释."
+      },
+      "FacetBatchRequest": {
+        "properties": {
+          "facet_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Facet Ids",
+            "description": "分类 ID 列表"
+          },
+          "action": {
+            "$ref": "#/components/schemas/FacetBatchAction",
+            "description": "favorite 置为已收藏, unfavorite 置为未收藏; 两者均幂等"
+          }
+        },
+        "type": "object",
+        "required": [
+          "facet_ids",
+          "action"
+        ],
+        "title": "FacetBatchRequest",
+        "description": "对一批分类执行同一个动作; 重复 id 去重, 使结果计数以去重后的条目数为准."
+      },
+      "FacetBatchResponse": {
+        "properties": {
+          "changed": {
+            "type": "integer",
+            "title": "Changed",
+            "description": "收藏位确实发生写入的分类数"
+          },
+          "unchanged": {
+            "type": "integer",
+            "title": "Unchanged",
+            "description": "已处于目标取值的分类数"
+          },
+          "missing": {
+            "type": "integer",
+            "title": "Missing",
+            "description": "不存在的分类 id 数"
+          }
+        },
+        "type": "object",
+        "required": [
+          "changed",
+          "unchanged",
+          "missing"
+        ],
+        "title": "FacetBatchResponse",
+        "description": "批量动作的结果计数, 字段按 action 解释; 两个已实现动作下三者之和等于去重后的条目数."
+      },
       "FacetKind": {
         "type": "string",
         "enum": [
@@ -7878,13 +7991,18 @@
           "count": {
             "type": "integer",
             "title": "Count"
+          },
+          "is_favorite": {
+            "type": "boolean",
+            "title": "Is Favorite"
           }
         },
         "type": "object",
         "required": [
           "id",
           "name",
-          "count"
+          "count",
+          "is_favorite"
         ],
         "title": "FacetResponse"
       },
@@ -8745,75 +8863,46 @@
               "poster_crop_skip_ratio": 0.9,
               "jpeg_quality": 95,
               "content_routes": {
-                "amateur": {
-                  "prefixes": [],
-                  "sites": [
-                    "mgstage",
-                    "dmm",
-                    "javdb",
-                    "javbus"
-                  ]
-                },
-                "censored": {
-                  "prefixes": [],
-                  "sites": [
-                    "dmm",
-                    "javdb",
-                    "javbus",
-                    "official"
-                  ]
-                },
-                "chinese": {
-                  "prefixes": [],
-                  "sites": [
-                    "iqqtv",
-                    "javdb",
-                    "airav",
-                    "freejavbt"
-                  ]
-                },
-                "fc2": {
-                  "prefixes": [],
-                  "sites": [
-                    "javdb",
-                    "fc2ppvdb",
-                    "fc2",
-                    "freejavbt"
-                  ]
-                },
-                "hentai": {
-                  "prefixes": [],
-                  "sites": [
-                    "getchu",
-                    "dmm",
-                    "javdb"
-                  ]
-                },
-                "manju": {
-                  "prefixes": [],
-                  "sites": []
-                },
-                "uncensored": {
-                  "prefixes": [],
-                  "sites": [
-                    "javdb",
-                    "javbus",
-                    "avsox",
-                    "freejavbt"
-                  ]
-                },
-                "unknown": {
-                  "prefixes": [],
-                  "sites": []
-                },
-                "western": {
-                  "prefixes": [],
-                  "sites": [
-                    "theporndb",
-                    "javdb",
-                    "freejavbt"
-                  ]
-                }
+                "amateur": [
+                  "mgstage",
+                  "dmm",
+                  "javdb",
+                  "javbus"
+                ],
+                "censored": [
+                  "dmm",
+                  "javdb",
+                  "javbus",
+                  "official"
+                ],
+                "chinese": [
+                  "iqqtv",
+                  "javdb",
+                  "airav",
+                  "freejavbt"
+                ],
+                "fc2": [
+                  "javdb",
+                  "fc2ppvdb",
+                  "fc2",
+                  "freejavbt"
+                ],
+                "hentai": [
+                  "getchu",
+                  "dmm",
+                  "javdb"
+                ],
+                "uncensored": [
+                  "javdb",
+                  "javbus",
+                  "avsox",
+                  "freejavbt"
+                ],
+                "western": [
+                  "theporndb",
+                  "javdb",
+                  "freejavbt"
+                ]
               },
               "field_priority": {},
               "field_blacklist": {},
@@ -8830,6 +8919,11 @@
               "site_config": {
                 "airav": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8837,6 +8931,11 @@
                 },
                 "avbase": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8844,6 +8943,11 @@
                 },
                 "avsox": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8851,6 +8955,11 @@
                 },
                 "dahlia": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8858,6 +8967,11 @@
                 },
                 "dmm": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8865,6 +8979,11 @@
                 },
                 "faleno": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8872,6 +8991,11 @@
                 },
                 "fc2": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8879,6 +9003,11 @@
                 },
                 "fc2club": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8886,6 +9015,11 @@
                 },
                 "fc2ppvdb": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8893,6 +9027,11 @@
                 },
                 "freejavbt": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8900,6 +9039,11 @@
                 },
                 "getchu": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8907,6 +9051,11 @@
                 },
                 "gfriends": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8914,6 +9063,11 @@
                 },
                 "giga": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8921,6 +9075,11 @@
                 },
                 "iqqtv": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8928,6 +9087,11 @@
                 },
                 "jav321": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8935,6 +9099,11 @@
                 },
                 "javbus": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8942,6 +9111,11 @@
                 },
                 "javdb": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8949,6 +9123,11 @@
                 },
                 "javlibrary": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8956,6 +9135,11 @@
                 },
                 "kin8": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8963,6 +9147,11 @@
                 },
                 "mgstage": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8970,6 +9159,11 @@
                 },
                 "minnano": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8977,6 +9171,11 @@
                 },
                 "official": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8984,6 +9183,11 @@
                 },
                 "prestige": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8991,6 +9195,11 @@
                 },
                 "r18dev": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -8998,6 +9207,11 @@
                 },
                 "theporndb": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -9005,6 +9219,11 @@
                 },
                 "wikipedia": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -9012,6 +9231,11 @@
                 },
                 "xcity": {
                   "cookie": {},
+                  "languages": [
+                    "zh",
+                    "ja",
+                    "en"
+                  ],
                   "official_routes": {},
                   "rate_limit": 2.0,
                   "use_browser": "auto",
@@ -9595,7 +9819,7 @@
           "scrape"
         ],
         "title": "LibraryAutomation",
-        "description": "媒体库自动化级别. 含更低级别的行为; 自动整理尚未开放."
+        "description": "媒体库自动化级别 (只控制发现侧). 含更低级别的行为; 自动整理由 `Library.auto_organize` 单独控制."
       },
       "LibraryCreateRequest": {
         "properties": {
@@ -9617,6 +9841,11 @@
           "automation": {
             "$ref": "#/components/schemas/LibraryAutomation",
             "default": "scrape"
+          },
+          "auto_organize": {
+            "type": "boolean",
+            "title": "Auto Organize",
+            "default": false
           },
           "ingest": {
             "$ref": "#/components/schemas/LibraryIngest",
@@ -9770,26 +9999,6 @@
             "title": "Write Nfo",
             "default": true
           },
-          "trash_empty_source": {
-            "type": "boolean",
-            "title": "Trash Empty Source",
-            "default": false
-          },
-          "fail_dir": {
-            "type": "string",
-            "title": "Fail Dir",
-            "default": ""
-          },
-          "move_to_fail_dir": {
-            "type": "boolean",
-            "title": "Move To Fail Dir",
-            "default": false
-          },
-          "exclude_fail_dir": {
-            "type": "boolean",
-            "title": "Exclude Fail Dir",
-            "default": true
-          },
           "copy_resources": {
             "items": {
               "$ref": "#/components/schemas/DownloadableResource"
@@ -9868,6 +10077,10 @@
           },
           "automation": {
             "$ref": "#/components/schemas/LibraryAutomation"
+          },
+          "auto_organize": {
+            "type": "boolean",
+            "title": "Auto Organize"
           },
           "ingest": {
             "$ref": "#/components/schemas/LibraryIngest"
@@ -10015,22 +10228,6 @@
             "type": "boolean",
             "title": "Write Nfo"
           },
-          "trash_empty_source": {
-            "type": "boolean",
-            "title": "Trash Empty Source"
-          },
-          "fail_dir": {
-            "type": "string",
-            "title": "Fail Dir"
-          },
-          "move_to_fail_dir": {
-            "type": "boolean",
-            "title": "Move To Fail Dir"
-          },
-          "exclude_fail_dir": {
-            "type": "boolean",
-            "title": "Exclude Fail Dir"
-          },
           "copy_resources": {
             "items": {
               "$ref": "#/components/schemas/DownloadableResource"
@@ -10060,6 +10257,7 @@
           "name",
           "path",
           "automation",
+          "auto_organize",
           "ingest",
           "recursive",
           "move_mode",
@@ -10067,10 +10265,6 @@
           "link_mode",
           "subtitle_extensions",
           "write_nfo",
-          "trash_empty_source",
-          "fail_dir",
-          "move_to_fail_dir",
-          "exclude_fail_dir",
           "copy_resources",
           "trailer_pattern",
           "blacklist_patterns",
@@ -10111,6 +10305,17 @@
                 "type": "null"
               }
             ]
+          },
+          "auto_organize": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auto Organize"
           },
           "ingest": {
             "anyOf": [
@@ -10312,50 +10517,6 @@
               }
             ],
             "title": "Write Nfo"
-          },
-          "trash_empty_source": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trash Empty Source"
-          },
-          "fail_dir": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Fail Dir"
-          },
-          "move_to_fail_dir": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Move To Fail Dir"
-          },
-          "exclude_fail_dir": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Exclude Fail Dir"
           },
           "copy_resources": {
             "anyOf": [
@@ -11694,6 +11855,85 @@
         "title": "OptionalPathTemplateDefaults",
         "description": "附属模板缺省 (Library 对应列为 None 时 ORGANIZE 使用)."
       },
+      "OrganizeConflict": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path"
+          },
+          "target": {
+            "type": "string",
+            "title": "Target"
+          },
+          "reason": {
+            "$ref": "#/components/schemas/OrganizeConflictReason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "path",
+          "target",
+          "reason"
+        ],
+        "title": "OrganizeConflict",
+        "description": "一条未落盘的整理项: 源路径 + 被占用的目标路径."
+      },
+      "OrganizeConflictReason": {
+        "type": "string",
+        "enum": [
+          "target_exists",
+          "subtitle_target_exists"
+        ],
+        "title": "OrganizeConflictReason",
+        "description": "整理未处理的原因."
+      },
+      "OrganizeResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "organize",
+            "title": "Type",
+            "default": "organize"
+          },
+          "organized": {
+            "type": "integer",
+            "title": "Organized"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "conflicted": {
+            "type": "integer",
+            "title": "Conflicted"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          },
+          "pruned_dirs": {
+            "type": "integer",
+            "title": "Pruned Dirs"
+          },
+          "conflicts": {
+            "items": {
+              "$ref": "#/components/schemas/OrganizeConflict"
+            },
+            "type": "array",
+            "title": "Conflicts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "organized",
+          "skipped",
+          "conflicted",
+          "failed",
+          "pruned_dirs",
+          "conflicts"
+        ],
+        "title": "OrganizeResult"
+      },
       "OrganizeSubmission": {
         "properties": {
           "library_id": {
@@ -11736,30 +11976,6 @@
             ],
             "title": "Copy Resources",
             "description": "覆盖 Library.copy_resources; None 沿用库设置"
-          },
-          "trash_empty_source": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trash Empty Source",
-            "description": "覆盖 Library.trash_empty_source; None 沿用库设置. 为真则整理后全库扫描, 递归无视频的目录整夹入 .amane_trash (不碰库根 / 回收目录 / 刮削失败输出目录)"
-          },
-          "move_to_fail_dir": {
-            "anyOf": [
-              {
-                "type": "boolean"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Move To Fail Dir",
-            "description": "覆盖 Library.move_to_fail_dir; None 沿用库设置. 为真且库 fail_dir 非空时, 无 Metadata 的正片整夹移入失败目录"
           },
           "media_file_ids": {
             "anyOf": [
@@ -12112,11 +12328,6 @@
               }
             ],
             "title": "Path"
-          },
-          "supports_test": {
-            "type": "boolean",
-            "title": "Supports Test",
-            "default": false
           }
         },
         "type": "object",
@@ -12126,38 +12337,6 @@
           "config_schema"
         ],
         "title": "PluginResponse"
-      },
-      "PluginTestRequest": {
-        "properties": {
-          "config": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Config"
-          }
-        },
-        "type": "object",
-        "title": "PluginTestRequest",
-        "description": "连通测试请求; ``config`` 覆盖已保存项后用于构造临时 provider, 不写回配置."
-      },
-      "PluginTestResponse": {
-        "properties": {
-          "ok": {
-            "type": "boolean",
-            "title": "Ok"
-          },
-          "detail": {
-            "type": "string",
-            "title": "Detail",
-            "default": ""
-          }
-        },
-        "additionalProperties": false,
-        "type": "object",
-        "required": [
-          "ok"
-        ],
-        "title": "PluginTestResponse",
-        "description": "连通测试响应, 形状与 ``FilmSourceTestResult`` 相同."
       },
       "R18Config": {
         "properties": {
@@ -12214,6 +12393,36 @@
         "type": "object",
         "title": "R18Config",
         "description": "放 Hot: 修改 dsn 经 AppRuntime.apply_rebuild() 重建只读引擎. 未配置 dsn 时整个数据源禁用.\n定时导入不在此节, 须经 Schedule API 创建 r18_import."
+      },
+      "R18ImportResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "r18_import",
+            "title": "Type",
+            "default": "r18_import"
+          },
+          "imported": {
+            "type": "boolean",
+            "title": "Imported"
+          },
+          "etag": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etag"
+          }
+        },
+        "type": "object",
+        "required": [
+          "imported"
+        ],
+        "title": "R18ImportResult"
       },
       "R18ImportSubmission": {
         "properties": {
@@ -12274,6 +12483,35 @@
         ],
         "title": "ReasoningDeltaRow",
         "description": "思考增量; `block_id` 取自协议的消息 id, 前端据此归块而不靠相邻关系."
+      },
+      "RefreshResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "refresh",
+            "title": "Type",
+            "default": "refresh"
+          },
+          "added": {
+            "type": "integer",
+            "title": "Added"
+          },
+          "removed": {
+            "type": "integer",
+            "title": "Removed"
+          },
+          "scrape": {
+            "type": "integer",
+            "title": "Scrape"
+          }
+        },
+        "type": "object",
+        "required": [
+          "added",
+          "removed",
+          "scrape"
+        ],
+        "title": "RefreshResult"
       },
       "RefreshSubmission": {
         "properties": {
@@ -12481,6 +12719,35 @@
         ],
         "title": "RequestUsageRow",
         "description": "单次模型请求的用量; 该次响应一到即写行, 到达顺序即它在回合里的位置 (这次响应的正文与工具调用之后)."
+      },
+      "RescrapeResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "rescrape",
+            "title": "Type",
+            "default": "rescrape"
+          },
+          "submitted": {
+            "type": "integer",
+            "title": "Submitted"
+          },
+          "metadata": {
+            "type": "integer",
+            "title": "Metadata",
+            "default": 0
+          },
+          "actors": {
+            "type": "integer",
+            "title": "Actors",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "submitted"
+        ],
+        "title": "RescrapeResult"
       },
       "RescrapeSubmission": {
         "properties": {
@@ -12808,6 +13075,66 @@
         "title": "SavedQueryUpdateRequest",
         "description": "仅名称 / 描述 / SQL 三项, 未知键被忽略; 显式 null 一律 422, 省略键才是「不更新」.\n\n字段不从 DB 模型派生: ``create_partial_model`` 会丢弃 ``StringConstraints``;\n约束别名与创建请求共用."
       },
+      "ScanInvalidResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "scan_invalid",
+            "title": "Type",
+            "default": "scan_invalid"
+          },
+          "inventory_id": {
+            "type": "string",
+            "title": "Inventory Id"
+          },
+          "entries": {
+            "type": "integer",
+            "title": "Entries"
+          },
+          "dirs": {
+            "type": "integer",
+            "title": "Dirs"
+          },
+          "scope_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scope Path"
+          },
+          "truncated": {
+            "type": "boolean",
+            "title": "Truncated",
+            "default": false
+          },
+          "skipped_dirs": {
+            "type": "integer",
+            "title": "Skipped Dirs",
+            "default": 0
+          },
+          "skipped_files": {
+            "type": "integer",
+            "title": "Skipped Files",
+            "default": 0
+          },
+          "blocked_dirs": {
+            "type": "integer",
+            "title": "Blocked Dirs",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "inventory_id",
+          "entries",
+          "dirs"
+        ],
+        "title": "ScanInvalidResult"
+      },
       "ScanInvalidSubmission": {
         "properties": {
           "library_id": {
@@ -13077,6 +13404,54 @@
         "type": "object",
         "title": "ScheduleUpdateRequest"
       },
+      "ScrapeResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "scrape",
+            "title": "Type",
+            "default": "scrape"
+          },
+          "metadata_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata Id"
+          },
+          "field_sources": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Field Sources"
+          },
+          "failed_sites": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Failed Sites"
+          },
+          "outcomes": {
+            "items": {
+              "$ref": "#/components/schemas/SiteOutcomeRecord"
+            },
+            "type": "array",
+            "title": "Outcomes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "field_sources",
+          "failed_sites"
+        ],
+        "title": "ScrapeResult"
+      },
       "ScrapeSubmission": {
         "properties": {
           "number": {
@@ -13173,7 +13548,37 @@
           },
           "content_routes": {
             "additionalProperties": {
-              "$ref": "#/components/schemas/ContentRouteEntry"
+              "items": {
+                "type": "string",
+                "enum": [
+                  "airav",
+                  "avbase",
+                  "avsox",
+                  "dahlia",
+                  "dmm",
+                  "faleno",
+                  "fc2",
+                  "fc2club",
+                  "fc2ppvdb",
+                  "freejavbt",
+                  "getchu",
+                  "giga",
+                  "iqqtv",
+                  "jav321",
+                  "javbus",
+                  "javdb",
+                  "javlibrary",
+                  "kin8",
+                  "mgstage",
+                  "official",
+                  "prestige",
+                  "r18dev",
+                  "theporndb",
+                  "xcity"
+                ]
+              },
+              "type": "array",
+              "x-ordered": true
             },
             "propertyNames": {
               "$ref": "#/components/schemas/ContentType"
@@ -13418,6 +13823,17 @@
             "title": "Use Proxy",
             "default": true
           },
+          "proxy": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proxy"
+          },
           "use_browser": {
             "$ref": "#/components/schemas/BrowserMode",
             "default": "auto"
@@ -13478,6 +13894,23 @@
             ],
             "title": "Rate Limit",
             "default": 2
+          },
+          "languages": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "zh",
+                "ja",
+                "en"
+              ]
+            },
+            "type": "array",
+            "title": "Languages",
+            "description": "词条语言优先级, 依序取第一个有正文的词条",
+            "x-ordered": true,
+            "x-visible-keys": [
+              "wikipedia"
+            ]
           }
         },
         "type": "object",
@@ -13566,6 +13999,11 @@
               }
             ],
             "title": "Detail"
+          },
+          "detail_truncated": {
+            "type": "boolean",
+            "title": "Detail Truncated",
+            "default": false
           }
         },
         "type": "object",
@@ -13586,7 +14024,7 @@
           "no_url"
         ],
         "title": "SkipReason",
-        "description": "``SKIPPED`` 的原因.\n\n与 ``FailureReason`` 分开: 这一档不是失败, 文案也不进任务报告. 界面按它本地化, 因此每种原因\n都要能独立读懂, 不依赖 ``detail``."
+        "description": "``SKIPPED`` 的原因.\n\n与 ``FailureReason`` 分开: 这一档不是失败, 文案也不进站点明细. 界面按它本地化, 因此每种原因\n都要能独立读懂, 不依赖 ``detail``."
       },
       "SortOrder": {
         "type": "string",
@@ -13858,28 +14296,7 @@
         "type": "object",
         "title": "TaskBatchResponse"
       },
-      "TaskChildListResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TaskChildResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "TaskChildListResponse"
-      },
-      "TaskChildResponse": {
+      "TaskChildItem": {
         "properties": {
           "id": {
             "type": "integer",
@@ -13901,23 +14318,6 @@
               }
             ],
             "title": "Title"
-          },
-          "payload": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Payload"
-          },
-          "result": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Result"
           },
           "error": {
             "anyOf": [
@@ -14018,7 +14418,28 @@
           "status",
           "link_key"
         ],
-        "title": "TaskChildResponse"
+        "title": "TaskChildItem"
+      },
+      "TaskChildListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaskChildItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "TaskChildListResponse"
       },
       "TaskChildStatusCounts": {
         "properties": {
@@ -14047,75 +14468,7 @@
         "title": "TaskChildStatusCounts",
         "description": "直接后继按状态计数. 四字段之和等于 child_count."
       },
-      "TaskListResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/TaskResponse"
-            },
-            "type": "array",
-            "title": "Items"
-          },
-          "total": {
-            "type": "integer",
-            "title": "Total"
-          }
-        },
-        "type": "object",
-        "required": [
-          "items",
-          "total"
-        ],
-        "title": "TaskListResponse"
-      },
-      "TaskReport": {
-        "properties": {
-          "headline": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Headline"
-          },
-          "metadata_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Metadata Id"
-          },
-          "actor_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Actor Id"
-          },
-          "outcomes": {
-            "items": {
-              "$ref": "#/components/schemas/SiteOutcomeRecord"
-            },
-            "type": "array",
-            "title": "Outcomes"
-          }
-        },
-        "type": "object",
-        "title": "TaskReport",
-        "description": "outcomes 与 summary.json 同一结构."
-      },
-      "TaskResponse": {
+      "TaskListItem": {
         "properties": {
           "id": {
             "type": "integer",
@@ -14137,23 +14490,6 @@
               }
             ],
             "title": "Title"
-          },
-          "payload": {
-            "additionalProperties": true,
-            "type": "object",
-            "title": "Payload"
-          },
-          "result": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Result"
           },
           "error": {
             "anyOf": [
@@ -14249,7 +14585,211 @@
           "type",
           "status"
         ],
-        "title": "TaskResponse"
+        "title": "TaskListItem",
+        "description": "列表与树: 不含 payload 与 result 等重字段, 展开时再取详情."
+      },
+      "TaskListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/TaskListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total"
+        ],
+        "title": "TaskListResponse"
+      },
+      "TaskResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "type": {
+            "$ref": "#/components/schemas/TaskType"
+          },
+          "status": {
+            "$ref": "#/components/schemas/TaskStatus"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "log_file": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Log File"
+          },
+          "retries": {
+            "type": "integer",
+            "title": "Retries",
+            "default": 0
+          },
+          "priority": {
+            "type": "integer",
+            "title": "Priority",
+            "default": 0
+          },
+          "root_task_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Root Task Id"
+          },
+          "child_count": {
+            "type": "integer",
+            "title": "Child Count",
+            "default": 0
+          },
+          "child_status": {
+            "$ref": "#/components/schemas/TaskChildStatusCounts"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "payload": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Payload"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RefreshResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OrganizeResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ScanInvalidResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/DeleteResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ScrapeResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/CleanupResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UpscaleResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/R18ImportResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ActorScrapeResult"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RescrapeResult"
+                  }
+                ],
+                "discriminator": {
+                  "propertyName": "type",
+                  "mapping": {
+                    "actor_scrape": "#/components/schemas/ActorScrapeResult",
+                    "cleanup": "#/components/schemas/CleanupResult",
+                    "delete": "#/components/schemas/DeleteResult",
+                    "organize": "#/components/schemas/OrganizeResult",
+                    "r18_import": "#/components/schemas/R18ImportResult",
+                    "refresh": "#/components/schemas/RefreshResult",
+                    "rescrape": "#/components/schemas/RescrapeResult",
+                    "scan_invalid": "#/components/schemas/ScanInvalidResult",
+                    "scrape": "#/components/schemas/ScrapeResult",
+                    "upscale": "#/components/schemas/UpscaleResult"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "status"
+        ],
+        "title": "TaskResponse",
+        "description": "详情: 额外带 payload 与按类型的 result."
       },
       "TaskSortField": {
         "type": "string",
@@ -14542,6 +15082,40 @@
         ],
         "title": "TurnUsageRow",
         "description": "回合收尾: 聚合用量归属当前助手消息, 同时标志本轮结束.\n\n正文不在此行重复: 适配器对每段正文都发 `TEXT_MESSAGE_CONTENT`, 故正文必然已由\n`TextDeltaRow` 落盘, 无须回退到整段文本."
+      },
+      "UpscaleResult": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "upscale",
+            "title": "Type",
+            "default": "upscale"
+          },
+          "scanned": {
+            "type": "integer",
+            "title": "Scanned"
+          },
+          "upscaled": {
+            "type": "integer",
+            "title": "Upscaled"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          },
+          "failed": {
+            "type": "integer",
+            "title": "Failed"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scanned",
+          "upscaled",
+          "skipped",
+          "failed"
+        ],
+        "title": "UpscaleResult"
       },
       "UpscaleSubmission": {
         "properties": {

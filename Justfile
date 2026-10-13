@@ -1,3 +1,9 @@
+# recipe 行必须同时兼容 sh 与 pwsh, 禁止在 recipe 中调用 bash / sh 脚本:
+# Windows 侧由 [windows] 指定 pwsh (sh 只随 Git for Windows 提供), 其它平台仍使用 just 默认的 sh -cu.
+# 需要 just >= 1.56.0 ([windows] 属性可用于 setting).
+[windows]
+set shell := ["pwsh", "-NoProfile", "-Command"]
+
 default:
     @just --list
 
@@ -15,7 +21,7 @@ setup: sync fixtures
 sync: _sync-python _web-install
 
 _sync-python:
-    uv sync --all-extras --dev --group packaging
+    uv sync --all-extras --all-groups
 
 [working-directory('web')]
 _web-install:
@@ -86,7 +92,7 @@ ci-windows:
 deps: _deps-python _web-deps
 
 _deps-python:
-    uv tree -d 1 --outdated
+    uv tree -d 1 --outdated --all-groups
 
 [working-directory('web')]
 _web-deps:
@@ -146,7 +152,7 @@ windows-app: sync build
 # SPA 由服务端提供, 不依赖 web/dist; 无 androidapp/keystore.properties 时退回 debug 包
 # 构建 Android 壳的 APK (需 JDK 17+ 与 Android SDK)
 android-app:
-    bash scripts/build_android_app.sh
+    uv run python scripts/build_android_app.py
 
 # 编译 Android 壳并运行单元测试 (CI 门禁; 需 JDK 17+ 与 Android SDK)
 android-check:

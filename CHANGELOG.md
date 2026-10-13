@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.15
+
+### 新功能
+
+- **漫剧 (`manju`)**: 文件名含季 / 集尾标时剥尾作番号并走漫剧路由; 默认挂 `mdcx.huangguoai` → `mdcx.javday`
+- **插件本地封面**: `amane-local:` locator, 物化成功后改写为 `/api/resources/{hash}`
+- **并入上游 0.19.0 / 0.20.0**: 媒体库自动整理、外挂字幕并集中字、分类收藏、按站点代理、指纹轮换、kin8→欧美 / ThePornDB 等 (详见上游对应条目)
+
 ## v1.0.14
 
 ### 修复

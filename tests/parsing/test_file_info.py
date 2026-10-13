@@ -393,7 +393,7 @@ INFER_CONTENT_TYPE_CASES: list[tuple[str, str | None, ContentType]] = [
     ("010115_001", None, ContentType.UNCENSORED),
     ("38-068", None, ContentType.UNKNOWN),
     ("高三爱情故事.S01E31", None, ContentType.MANJU),
-    ("KIN8-123", None, ContentType.UNCENSORED),
+    ("KIN8-123", None, ContentType.WESTERN),
     ("TH101-123-12345", None, ContentType.UNCENSORED),
     ("FC2-PPV-1234567", None, ContentType.FC2),
     ("vixen.23.04.15", None, ContentType.WESTERN),

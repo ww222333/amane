@@ -11,6 +11,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from amane.db.models import TaskStatus, TaskType
 from amane.handlers.protocol import FollowupTask, TaskHandler, TaskResult
 from amane.scheduler.worker import CANCEL_ERROR, AsyncWorker
+from tests.helpers import LOAD_TOLERANT_TIMEOUT
 
 if TYPE_CHECKING:
     from amane.db.repository import Repository
@@ -63,7 +64,7 @@ class BlockingHandler(TaskHandler):
         return TaskResult(success=True, result={"blocked": True})
 
 
-async def recv(worker: AsyncWorker, n: int, timeout: float = 5.0) -> list[int]:
+async def recv(worker: AsyncWorker, n: int, timeout: float = LOAD_TOLERANT_TIMEOUT) -> list[int]:
     """从 worker 的 done channel 接收 n 个完成信号."""
     ids = []
     async with asyncio.timeout(timeout):
@@ -315,6 +316,10 @@ async def test_worker_respects_concurrency(repo: Repository) -> None:
     max_concurrent = 0
     current = 0
     lock = asyncio.Lock()
+    # 两个任务同时在跑才放行; 原先靠固定的 0.05s 睡眠窗, 认领慢时第二个任务
+    # 还没被认领第一个就已经结束, 观察不到并发.
+    both_running = asyncio.Event()
+    release = asyncio.Event()
 
     class ConcurrencyTracker(TaskHandler):
         def __init__(self):
@@ -325,7 +330,9 @@ async def test_worker_respects_concurrency(repo: Repository) -> None:
             async with lock:
                 current += 1
                 max_concurrent = max(max_concurrent, current)
-            await asyncio.sleep(0.05)
+                if current > 1:
+                    both_running.set()
+            await release.wait()
             async with lock:
                 current -= 1
             return TaskResult(success=True, result={})
@@ -337,6 +344,9 @@ async def test_worker_respects_concurrency(repo: Repository) -> None:
         await repo.create_task(TaskType.SCRAPE, payload={"i": i})
 
     worker.start()
+    async with asyncio.timeout(LOAD_TOLERANT_TIMEOUT):
+        await both_running.wait()
+    release.set()
     await recv(worker, 4)
     await stop_worker(worker)
 
@@ -424,6 +434,123 @@ async def test_worker_completes_with_followups(repo: Repository) -> None:
     assert child_a is not None and child_a.payload == {"number": "FO-1"}
     child_b = await repo.get_task(by_key["child-b"])
     assert child_b is not None and child_b.priority == -1
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_worker_stores_result_on_failure(repo: Repository) -> None:
+    """失败分支同样落库结果载荷 (handler 给了才写), 供详情面板解释失败原因."""
+
+    class FailWithResultHandler(TaskHandler):
+        def __init__(self):
+            super().__init__(payload_t=dict, result_t=dict)
+
+        async def handle(self, payload: dict):
+            return TaskResult(
+                success=False, error="boom", result={"type": "refresh", "added": 0, "removed": 0, "scrape": 0}
+            )
+
+    handlers = {TaskType.REFRESH: FailWithResultHandler()}
+    worker = AsyncWorker(repo=repo, handlers=handlers, poll_interval=0.05)
+
+    t = await repo.create_task(TaskType.REFRESH, payload={"library_id": 1})
+    assert t.id is not None
+
+    worker.start()
+    await recv(worker, 1)
+    await stop_worker(worker)
+
+    fetched = await repo.get_task(t.id)
+    assert fetched is not None
+    assert fetched.status == TaskStatus.FAILED
+    assert fetched.result == {"type": "refresh", "added": 0, "removed": 0, "scrape": 0}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_worker_stores_failure_result_on_crash(repo: Repository) -> None:
+    """handler 抛出时, 它补的失败载荷照样落库 (站点事实不该随异常丢掉)."""
+
+    class CrashWithResultHandler(TaskHandler):
+        def __init__(self):
+            super().__init__(payload_t=dict, result_t=dict)
+
+        async def handle(self, payload: dict):
+            raise RuntimeError("boom")
+
+        def failure_result(self, payload: dict):
+            return {"type": "refresh", "added": 0, "removed": 0, "scrape": 0}
+
+    handlers = {TaskType.REFRESH: CrashWithResultHandler()}
+    worker = AsyncWorker(repo=repo, handlers=handlers, poll_interval=0.05)
+
+    t = await repo.create_task(TaskType.REFRESH, payload={"library_id": 1})
+    assert t.id is not None
+
+    worker.start()
+    await recv(worker, 1)
+    await stop_worker(worker)
+
+    fetched = await repo.get_task(t.id)
+    assert fetched is not None
+    assert fetched.status == TaskStatus.FAILED
+    assert fetched.result == {"type": "refresh", "added": 0, "removed": 0, "scrape": 0}
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_worker_crash_with_broken_failure_result(repo: Repository) -> None:
+    """补交载荷的钩子自己抛错时不影响失败处理: 任务照样 FAILED, 载荷为空."""
+
+    class BrokenHookHandler(TaskHandler):
+        def __init__(self):
+            super().__init__(payload_t=dict, result_t=dict)
+
+        async def handle(self, payload: dict):
+            raise RuntimeError("boom")
+
+        def failure_result(self, payload: dict):
+            raise RuntimeError("hook exploded")
+
+    handlers = {TaskType.REFRESH: BrokenHookHandler()}
+    worker = AsyncWorker(repo=repo, handlers=handlers, poll_interval=0.05)
+
+    t = await repo.create_task(TaskType.REFRESH, payload={"library_id": 1})
+    assert t.id is not None
+
+    worker.start()
+    await recv(worker, 1)
+    await stop_worker(worker)
+
+    fetched = await repo.get_task(t.id)
+    assert fetched is not None
+    assert fetched.status == TaskStatus.FAILED
+    assert fetched.error == "boom"
+    assert fetched.result is None
+
+
+@pytest.mark.asyncio(loop_scope="function")
+async def test_worker_cancel_keeps_failure_result(repo: Repository) -> None:
+    """取消同样落库 handler 补的失败载荷."""
+
+    class BlockingWithResultHandler(BlockingHandler):
+        def failure_result(self, payload: dict):
+            return {"type": "refresh", "added": 0, "removed": 0, "scrape": 0}
+
+    handler = BlockingWithResultHandler()
+    worker = AsyncWorker(repo=repo, handlers={TaskType.REFRESH: handler}, poll_interval=0.05, shutdown_timeout=0)
+
+    t = await repo.create_task(TaskType.REFRESH, payload={"library_id": 1})
+    assert t.id is not None
+    worker.start()
+    await asyncio.wait_for(handler.started.wait(), timeout=5)
+
+    worker.retire()
+    await worker.wait_stopped()
+    await worker.shutdown_active()
+
+    fetched = await repo.get_task(t.id)
+    assert fetched is not None
+    assert fetched.status == TaskStatus.FAILED
+    assert fetched.error == CANCEL_ERROR
+    assert fetched.result == {"type": "refresh", "added": 0, "removed": 0, "scrape": 0}
 
 
 @pytest.mark.asyncio(loop_scope="function")

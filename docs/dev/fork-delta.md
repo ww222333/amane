@@ -2,6 +2,7 @@
 
 > 对照基准: [sqzw-x/amane](https://github.com/sqzw-x/amane) 的 `main` (经 `upstream` 远端跟踪).
 > 本文只列**本仓库相对该上游多出的产品能力**. 机制细节见交叉链接; 字段与签名以源码 / OpenAPI 为准.
+> 实现这些能力时相对上游有差异的路径清单见 [fork-files.md](fork-files.md).
 > 上游已有且本仓库已并入的能力 (播放、Android 客户端、LLM、桌面环境变量配置等) 不在此重复.
 
 ## 未知 / 漫剧内容类型与路由
@@ -58,3 +59,5 @@
 ## 版本线
 
 本仓库 CHANGELOG 在上游发版条目之上另以 `v1.0.x` 记录独有能力. 已并入上游至 **0.20.0** (含自动整理、外挂字幕识别、分类收藏、按站点代理、指纹轮换、无效文件清理等), 同时保留本节所列 fork 能力.
+
+合并 `upstream/main` 后必须确认 Alembic 仅有一个 head, 再发版; 流程见 [database.md](database.md)「并入上游时的 revision 图」.

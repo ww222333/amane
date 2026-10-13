@@ -98,3 +98,15 @@ SQLite 没有原生 enum, 列仍是 VARCHAR. 不能使用 `Column(String)` 或 `
 ## 迁移工作流
 
 修改 `src/amane/db/models.py` 后, 用 `uv run alembic revision --autogenerate -m "描述"` 生成 (数据迁移用 `revision` 不加 `--autogenerate`), **绝对禁止手写 revision ID**. 生成后审脚本 — 重命名 / 特殊改动手补, 并补翻译之外的 data revision. 最后 `uv run alembic upgrade head` 本地验证 (或重启服务自动跑), 运行测试并提交迁移文件.
+
+## 并入上游时的 revision 图
+
+启动路径固定执行 `alembic upgrade head`. `head` 只能解析到**唯一** tip; 图中同时存在多个 tip 时, 启动以 `Multiple head revisions` 失败, 服务无法进入业务态.
+
+本仓库相对上游另有 fork 迁移线 (见 [fork-delta.md](fork-delta.md) / [fork-files.md](fork-files.md)). 每次合并 `upstream/main` 后必须:
+
+1. 运行 `uv run alembic heads`, 确认输出恰好一行 `(head)`.
+2. 若出现两个及以上 head: 用 `uv run alembic merge -m "描述" <rev_a> <rev_b>` 生成空 merge revision (禁止手写 revision ID), 再复查 `heads` 为单一 tip.
+3. 在干净空库或测试库上执行 `uv run alembic upgrade head`, 确认无报错后再提交、打 tag、发 Docker.
+
+禁止在未确认单一 head 的情况下发版或推 `v*` tag. 仅合并业务代码、不处理 revision 图, 会把双 head 带进镜像, 用户升级后无法启动.

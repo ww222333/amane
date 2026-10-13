@@ -15,7 +15,7 @@
 | 爬虫 / 采集 fixture | [crawlers.md](crawlers.md) (含番号入参) · [crawler-testing.md](crawler-testing.md) |
 | 来源插件 (影片刮削 / 播放) | [plugins.md](plugins.md) · [crawlers.md](crawlers.md) |
 | 站点覆盖 / 默认路由 | [content-routes.md](content-routes.md) |
-| 相对上游的独有能力 | [fork-delta.md](fork-delta.md) |
+| 相对上游的独有能力 | [fork-delta.md](fork-delta.md) · 改动文件 [fork-files.md](fork-files.md) |
 | API 端点 | [api.md](api.md) |
 | 前端文件索引 (路由 → 文件) | [frontend.md](frontend.md) |
 | 表结构 / 迁移 | [database.md](database.md) |

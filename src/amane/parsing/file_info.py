@@ -5,6 +5,7 @@
 常用字段投影是同一函数的包装.
 
 文件相位 (cd / 中字 / 马赛克 / 分辨率) 与类型正交: cd / 中字 / 分辨率只依据文件名; 马赛克依据文件名与目录整段词表, 未命中时再依据番号分类 (有码类型为 censored, 无码类型为 uncensored; 其它类型为空).
+``cd`` 兼认多碟标记 (CD / PART / A-B) 与剧集尾标 (SxxExx / EP / 第 N 集); 季号不写入 ``cd``, 只取集号. 「全 N 集」只用于漫剧归类, 不填 ``cd``.
 """
 
 from __future__ import annotations
@@ -666,9 +667,17 @@ def _classify_from_path(stem: str, dir_names: tuple[str, ...]) -> ContentType | 
 
 
 def _detect_cd(basename: str) -> int | None:
-    if m := re.search(r"[-_.]CD(\d{1,2})", basename):
+    """多碟与剧集尾标 → 分集编号; 同文件多标记时先多碟后剧集."""
+    if m := re.search(r"[-_.]CD(\d{1,2})", basename, flags=re.IGNORECASE):
         return int(m[1])
-    if m := re.search(r"[-_.]PART(\d{1,2})", basename):
+    if m := re.search(r"[-_.]PART(\d{1,2})", basename, flags=re.IGNORECASE):
+        return int(m[1])
+    # S01E31 / S1E2 → 只取集号 (31 / 2), 季号不进入 cd.
+    if m := re.search(r"(?i)(?:^|[\s._-])S\d{1,2}\s*E\s*(\d{1,4})(?:$|[\s._-])", basename):
+        return int(m[1])
+    if m := re.search(r"(?i)(?:^|[\s._-])E(?:P(?:ISODE)?)?\s*(\d{1,4})(?:$|[\s._-])", basename):
+        return int(m[1])
+    if m := re.search(r"第\s*(\d{1,4})\s*[集话話期](?:$|[\s._-])", basename):
         return int(m[1])
     if m := re.search(r"-([AB])(?:\.|$)", basename):
         return ord(m[1]) - ord("A") + 1

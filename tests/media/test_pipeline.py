@@ -193,6 +193,16 @@ def test_success_first_partition():
         assert pipeline_mod._success_first(urls, ok) == expected
 
 
+def test_display_urls_rewrites_amane_local(resource_store: ResourceStore):
+    """成功的 amane-local 改写为 /api/resources/{hash}; http(s) 与失败项保持原样."""
+    local = "amane-local:mdcx.demo/covers/a.jpg"
+    http_ok = "https://s/live.jpg"
+    http_dead = "https://s/dead.jpg"
+    out = pipeline_mod._display_urls(resource_store, [local, http_ok, http_dead], {local, http_ok})
+    assert out[0] == f"/api/resources/{resource_store.url_hash(local)}"
+    assert out[1:] == [http_ok, http_dead]
+
+
 @pytest.mark.asyncio
 async def test_poster_reordered_when_first_url_dead(resource_store: ResourceStore, tmp_path: Path):
     """poster 首位 URL 下载失败 → 成功者前置 (无 thumb 不触发裁剪)."""

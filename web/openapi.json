@@ -7596,6 +7596,7 @@
           "fc2",
           "amateur",
           "hentai",
+          "manju",
           "unknown"
         ],
         "title": "ContentType"
@@ -8787,6 +8788,10 @@
                     "dmm",
                     "javdb"
                   ]
+                },
+                "manju": {
+                  "prefixes": [],
+                  "sites": []
                 },
                 "uncensored": {
                   "prefixes": [],

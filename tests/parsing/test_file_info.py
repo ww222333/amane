@@ -184,6 +184,12 @@ CASES: list[object] = [
     _Case("/media/010115_01.mp4", mosaic="uncensored", number="010115_01", content_type=ContentType.UNCENSORED),
     _Case("/media/010115-001/video.mp4", mosaic="uncensored", number="010115-001", content_type=ContentType.UNCENSORED),
     _Case("/media/38-068.mp4", number="38-068", content_type=ContentType.UNKNOWN),
+    # 漫剧: 季集尾标 → 剥尾后的剧名
+    _Case("/media/高三爱情故事.S01E31.mp4", number="高三爱情故事", content_type=ContentType.MANJU),
+    _Case("/media/高三爱情故事.s01e01.mp4", number="高三爱情故事", content_type=ContentType.MANJU),
+    _Case("/media/某剧名.第12集.mp4", number="某剧名", content_type=ContentType.MANJU),
+    _Case("/media/某剧名.EP03.mp4", number="某剧名", content_type=ContentType.MANJU),
+    _Case("/media/漫剧/纯剧名无集数.mp4", number="纯剧名无集数", content_type=ContentType.MANJU),
     _Case("/media/欧美/T38-068.mp4", number="T38-068", content_type=ContentType.WESTERN),
     _Case("/media/欧美/010115-001.mp4", number="010115-001", content_type=ContentType.WESTERN),
     _Case("/media/SSNI00321.mp4", number="SSNI-321", content_type=ContentType.CENSORED),
@@ -386,6 +392,7 @@ INFER_CONTENT_TYPE_CASES: list[tuple[str, str | None, ContentType]] = [
     ("010115-001", None, ContentType.UNCENSORED),
     ("010115_001", None, ContentType.UNCENSORED),
     ("38-068", None, ContentType.UNKNOWN),
+    ("高三爱情故事.S01E31", None, ContentType.MANJU),
     ("KIN8-123", None, ContentType.UNCENSORED),
     ("TH101-123-12345", None, ContentType.UNCENSORED),
     ("FC2-PPV-1234567", None, ContentType.FC2),
@@ -466,6 +473,7 @@ EXTRACT_NUMBER_CASES: list[tuple[str, str | None]] = [
     ("", None),
     ("FC2 配信開始", None),
     ("just a movie title", None),
+    ("高三爱情故事.S01E31", "高三爱情故事"),
 ]
 
 

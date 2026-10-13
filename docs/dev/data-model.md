@@ -120,7 +120,7 @@ PATCH 三态: **省略键** = 不更新 (`exclude_unset`); **显式值** = 写�
 
 ## Resource (一等存储, 非缓存)
 
-`Resource.url` UNIQUE, 作**通用 locator key**: 原始外部图用真实外部 URL, 派生裁剪用合成串 `derived:{sha256(src_url)}:crop:{args}`. 手动裁切写入派生 Resource: 海报替换 `poster_urls`, 演员头像前插 `image_urls` 并保留原图; 均**不**修改库路径海报 (ORGANIZE 再复制). `file_path` 是相对于 `{data_dir}/resources/` 的两级散列路径.
+`Resource.url` UNIQUE, 作**通用 locator key**: 原始外部图用真实外部 URL, 派生裁剪用合成串 `derived:{sha256(src_url)}:crop:{args}`, 插件已解密落盘图用 `amane-local:{plugin_id}/{相对 plugins/<id>/ 的路径}` (由 `ResourceStore.acquire` 拷入 resources, 不发 HTTP; 路径不得含 `..`). 物化写入 Metadata 时, 成功的 `amane-local:` 改写为 `/api/resources/{hash}` (前端只代理 http(s), 浏览器无法加载该 scheme). 手动裁切写入派生 Resource: 海报替换 `poster_urls`, 演员头像前插 `image_urls` 并保留原图; 均**不**修改库路径海报 (ORGANIZE 再复制). `file_path` 是相对于 `{data_dir}/resources/` 的两级散列路径.
 
 `meta` (JSON, 默认 `{}`) 在派生 / 被处理资源上记录可逆来源与处理标记: 裁剪记 `{'op':'crop','src':底层locator,'args':str}` (不记 `/api/resources/{hash}` 内部 URL); 任意资源被超分后追加 `{'sr':{tool,model,scale}}` — 超分**就地覆盖**文件 (URL 不变), `'sr' in meta` 即去重依据.
 

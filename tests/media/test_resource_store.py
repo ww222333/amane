@@ -5,7 +5,12 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import pytest
 
 from amane.media import ResourceStore, derived_locator
-from amane.media.resource_store import RESOURCE_URL_PREFIX, _is_placeholder_url, internal_url_hash
+from amane.media.resource_store import (
+    RESOURCE_URL_PREFIX,
+    _is_placeholder_url,
+    internal_url_hash,
+    resolve_amane_local,
+)
 from amane.net.http import RateLimiters, WebClient
 
 if TYPE_CHECKING:
@@ -304,3 +309,43 @@ class TestPlaceholderRedirect:
         assert path is not None and path.read_bytes() == b"jpeg-bytes"
         assert session.methods[0] == "HEAD" and "GET" in session.methods
         assert await resource_store.get_by_url(_REQUEST) is not None
+
+
+class TestAmaneLocal:
+    def test_resolve_rejects_traversal(self, resource_store: ResourceStore):
+        data_dir = resource_store.data_dir
+        assert resolve_amane_local("amane-local:mdcx.demo/../secrets.txt", data_dir) is None
+        assert resolve_amane_local("amane-local:../etc/passwd", data_dir) is None
+        assert resolve_amane_local("https://example.com/a.jpg", data_dir) is None
+
+    @pytest.mark.asyncio
+    async def test_acquire_copies_plugin_file(
+        self, resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        data_dir = resource_store.data_dir
+        src = data_dir / "plugins" / "mdcx.demo" / "covers" / "a.jpg"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_bytes(b"\xff\xd8\xffplugin-jpeg")
+        locator = "amane-local:mdcx.demo/covers/a.jpg"
+        client, session = _stub_client(monkeypatch, final_url="https://unused", content=b"")
+
+        path = await resource_store.acquire(locator, client)
+
+        assert path is not None and path.read_bytes() == b"\xff\xd8\xffplugin-jpeg"
+        assert session.methods == []  # 不发 HTTP
+        assert await resource_store.get_by_url(locator) is not None
+
+        # 再次 acquire 走缓存
+        path2 = await resource_store.acquire(locator, client)
+        assert path2 == path
+        assert session.methods == []
+
+    @pytest.mark.asyncio
+    async def test_acquire_missing_local_does_not_http(
+        self, resource_store: ResourceStore, monkeypatch: pytest.MonkeyPatch
+    ):
+        locator = "amane-local:mdcx.demo/covers/missing.jpg"
+        client, session = _stub_client(monkeypatch, final_url="https://unused", content=b"")
+
+        assert await resource_store.acquire(locator, client) is None
+        assert session.methods == []

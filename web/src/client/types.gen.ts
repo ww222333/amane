@@ -779,7 +779,7 @@ export type ContentRouteEntry = {
 /**
  * ContentType
  */
-export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai' | 'unknown';
+export type ContentType = 'censored' | 'uncensored' | 'chinese' | 'western' | 'fc2' | 'amateur' | 'hentai' | 'manju' | 'unknown';
 
 /**
  * CropAvatarRequest

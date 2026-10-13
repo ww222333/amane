@@ -61,46 +61,52 @@ def _site_value(site: Any) -> str:
 
 
 #: 各内容类型默认有序路由 (资格真值 + 该类型默认字段优先级).
-_DEFAULT_CONTENT_ROUTES: dict[ContentType, list[SiteName]] = {
+# 值为站点 / 插件来源 ID; 内置站用 SiteName, 第三方插件用 namespace.id.
+_DEFAULT_CONTENT_ROUTES: dict[ContentType, list[str]] = {
     ContentType.CENSORED: [
-        SiteName.DMM,
-        SiteName.JAVDB,
-        SiteName.JAVBUS,
-        SiteName.OFFICIAL,
+        str(SiteName.DMM),
+        str(SiteName.JAVDB),
+        str(SiteName.JAVBUS),
+        str(SiteName.OFFICIAL),
     ],
     ContentType.UNCENSORED: [
-        SiteName.JAVDB,
-        SiteName.JAVBUS,
-        SiteName.AVSOX,
-        SiteName.FREEJAVBT,
+        str(SiteName.JAVDB),
+        str(SiteName.JAVBUS),
+        str(SiteName.AVSOX),
+        str(SiteName.FREEJAVBT),
     ],
     ContentType.FC2: [
-        SiteName.JAVDB,
-        SiteName.FC2PPVDB,
-        SiteName.FC2,
-        SiteName.FREEJAVBT,
+        str(SiteName.JAVDB),
+        str(SiteName.FC2PPVDB),
+        str(SiteName.FC2),
+        str(SiteName.FREEJAVBT),
     ],
     ContentType.CHINESE: [
-        SiteName.IQQTV,
-        SiteName.JAVDB,
-        SiteName.AIRAV,
-        SiteName.FREEJAVBT,
+        str(SiteName.IQQTV),
+        str(SiteName.JAVDB),
+        str(SiteName.AIRAV),
+        str(SiteName.FREEJAVBT),
     ],
     ContentType.AMATEUR: [
-        SiteName.MGSTAGE,
-        SiteName.DMM,
-        SiteName.JAVDB,
-        SiteName.JAVBUS,
+        str(SiteName.MGSTAGE),
+        str(SiteName.DMM),
+        str(SiteName.JAVDB),
+        str(SiteName.JAVBUS),
     ],
     ContentType.WESTERN: [
-        SiteName.THEPORNDB,
-        SiteName.JAVDB,
-        SiteName.FREEJAVBT,
+        str(SiteName.THEPORNDB),
+        str(SiteName.JAVDB),
+        str(SiteName.FREEJAVBT),
     ],
     ContentType.HENTAI: [
-        SiteName.GETCHU,
-        SiteName.DMM,
-        SiteName.JAVDB,
+        str(SiteName.GETCHU),
+        str(SiteName.DMM),
+        str(SiteName.JAVDB),
+    ],
+    # 漫剧: 默认挂黄果 / JavDay 插件; 未安装时路由校验放行, 刮削跳过缺失来源.
+    ContentType.MANJU: [
+        "mdcx.huangguoai",
+        "mdcx.javday",
     ],
     ContentType.UNKNOWN: [],
 }
@@ -296,7 +302,7 @@ class ContentRouteEntry(BaseModel):
 
 def _default_content_routes() -> dict[ContentType, ContentRouteEntry]:
     return {
-        ct: ContentRouteEntry(sites=[str(site) for site in _DEFAULT_CONTENT_ROUTES.get(ct, [])]) for ct in ContentType
+        ct: ContentRouteEntry(sites=list(_DEFAULT_CONTENT_ROUTES.get(ct, []))) for ct in ContentType
     }
 
 

@@ -3,11 +3,13 @@
 派生资源用合成 locator ``derived:{sha256(src)}:{op}:{args}``.
 就地超分覆盖原文件, URL 不变, meta 打 ``sr`` 标记.
 内部 URL ``/api/resources/{hash}`` 是对既有 Resource 的引用, 解析为本地文件而不发请求.
+插件落盘图用 ``amane-local:{plugin_id}/{rel}``, 从 ``{data_dir}/plugins/<id>/`` 拷入 resources.
 """
 
 import asyncio
 import hashlib
 import mimetypes
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -29,6 +31,8 @@ if TYPE_CHECKING:
 logger = structlog.get_logger()
 
 RESOURCE_URL_PREFIX = "/api/resources"
+# 插件落盘图 locator: amane-local:{plugin_id}/{相对 data_dir/plugins/<id>/ 的 POSIX 路径}
+AMANE_LOCAL_PREFIX = "amane-local:"
 
 # 上游把已下架资源重定向到 200 的占位图 (DMM 的 now_printing) 时不能算获取成功:
 # 否则该 URL 会被判为可用并前置, 前端最终显示占位图本身.
@@ -38,6 +42,30 @@ _PLACEHOLDER_PATH_MARKERS: tuple[str, ...] = ("/now_printing/",)
 def _is_placeholder_url(url: str) -> bool:
     path = urlsplit(url).path.lower()
     return any(marker in path for marker in _PLACEHOLDER_PATH_MARKERS)
+
+
+def resolve_amane_local(url: str, data_dir: Path) -> Path | None:
+    """解析 ``amane-local:`` 到插件 data_dir 下的真实文件; 越界或缺失返回 None."""
+    if not url.startswith(AMANE_LOCAL_PREFIX):
+        return None
+    rest = url[len(AMANE_LOCAL_PREFIX) :]
+    plugin_id, sep, rel = rest.partition("/")
+    if not sep or not plugin_id or not rel:
+        return None
+    if any(p in plugin_id for p in ("/", "\\", "..")):
+        return None
+    rel_path = Path(rel)
+    if rel_path.is_absolute() or ".." in rel_path.parts:
+        return None
+    root = (data_dir / "plugins" / plugin_id).resolve()
+    path = (root / rel_path).resolve()
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return None
+    if not path.is_file():
+        return None
+    return path
 
 
 def internal_url_hash(url: str) -> str | None:
@@ -128,6 +156,22 @@ class ResourceStore:
 
             return full_path
 
+    async def _commit_file(self, url: str, dest: Path) -> Path:
+        size = dest.stat().st_size if dest.exists() else None
+        mime = mimetypes.guess_type(str(dest))[0]
+        content_hash = self._hash_file(dest)
+        async with self._session() as session:
+            record = Resource(
+                url=url,
+                file_path=self._relative_path(dest),
+                content_hash=content_hash,
+                size=size,
+                mime_type=mime,
+            )
+            session.add(record)
+            await session.commit()
+        return dest
+
     async def acquire(self, url: str, client: WebClient) -> Path | None:
         # 内部 URL 是对既有 Resource 的引用: 直接解析本地文件, 不下载也不写记录.
         internal = internal_url_hash(url)
@@ -139,6 +183,25 @@ class ResourceStore:
         cached = await self.resolve(url)
         if cached:
             return cached
+
+        # 插件落盘图: 从 data_dir/plugins/<id>/ 拷入 resources, 绝不发 HTTP.
+        if url.startswith(AMANE_LOCAL_PREFIX):
+            local_src = resolve_amane_local(url, self.data_dir)
+            if local_src is None:
+                logger.warning(
+                    "amane-local missing or outside plugin data_dir",
+                    url=url,
+                    data_dir=str(self.data_dir),
+                )
+                return None
+            dest = self._compute_path(url, ext=local_src.suffix)
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                await asyncio.to_thread(shutil.copyfile, local_src, dest)
+            except OSError as e:
+                logger.warning("amane-local copy failed", url=url, error=str(e))
+                return None
+            return await self._commit_file(url, dest)
 
         # 上游改派占位图时跳过, 不占用 dest 也不写记录.
         final_url = await client.resolve_final_url(url)
@@ -154,32 +217,22 @@ class ResourceStore:
         if not ok:
             return None
 
-        size = dest.stat().st_size if dest.exists() else None
-        mime = mimetypes.guess_type(str(dest))[0]
-        content_hash = self._hash_file(dest)
-
-        # 写入记录.
-        async with self._session() as session:
-            record = Resource(
-                url=url,
-                file_path=self._relative_path(dest),
-                content_hash=content_hash,
-                size=size,
-                mime_type=mime,
-            )
-            session.add(record)
-            await session.commit()
-
-        return dest
+        return await self._commit_file(url, dest)
 
     async def resolve_source(self, url: str, client: WebClient) -> ResolvedSource | None:
-        """处理入口的源解析: 内部 URL 定位既有 Resource, 外部仅接受 http(s), 其余返回 None."""
+        """处理入口的源解析: 内部 URL / amane-local / http(s); 其余返回 None."""
         internal = internal_url_hash(url)
         if internal is not None:
             found = await self.get_by_url_hash(internal)
             if found is None:
                 return None
             return ResolvedSource(locator=found[0].url, path=found[1])
+
+        if url.startswith(AMANE_LOCAL_PREFIX):
+            path = await self.acquire(url, client)
+            if path is None:
+                return None
+            return ResolvedSource(locator=url, path=path)
 
         if not url.startswith(("http://", "https://")):
             return None

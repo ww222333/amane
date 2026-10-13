@@ -1462,6 +1462,7 @@ export const ContentTypeSchema = {
         'fc2',
         'amateur',
         'hentai',
+        'manju',
         'unknown'
     ],
     title: 'ContentType'
@@ -2686,6 +2687,10 @@ export const HotSettingsSchema = {
                             'dmm',
                             'javdb'
                         ]
+                    },
+                    manju: {
+                        prefixes: [],
+                        sites: []
                     },
                     uncensored: {
                         prefixes: [],

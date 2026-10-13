@@ -20,7 +20,7 @@ from .images import (
     should_crop_poster,
     validate_crop_box,
 )
-from .resource_store import RESOURCE_URL_PREFIX
+from .resource_store import AMANE_LOCAL_PREFIX, RESOURCE_URL_PREFIX
 
 if TYPE_CHECKING:
     from ..config import HotSettings, SrConfig
@@ -47,6 +47,21 @@ def _internal_url(store: ResourceStore, locator_url: str) -> str:
 def _success_first(urls: list[str], succeeded: set[str]) -> list[str]:
     # 成功者保序前置, 失败者保序置于尾部. succeeded 为空时幂等返回原序.
     return [u for u in urls if u in succeeded] + [u for u in urls if u not in succeeded]
+
+
+def _display_urls(store: ResourceStore, urls: list[str], succeeded: set[str]) -> list[str]:
+    """物化后写入 metadata 的 URL 列表.
+
+    ``amane-local:`` 浏览器无法直接加载, 成功项改写为 ``/api/resources/{hash}``;
+    http(s) 仍保留原 locator, 由前端 proxy 拉取.
+    """
+    out: list[str] = []
+    for url in _success_first(urls, succeeded):
+        if url in succeeded and url.startswith(AMANE_LOCAL_PREFIX):
+            out.append(_internal_url(store, url))
+        else:
+            out.append(url)
+    return out
 
 
 def sr_args_dict(cfg: SrConfig) -> dict:
@@ -153,9 +168,9 @@ async def materialize_images(
                 await _maybe_upscale(store, crop_res, config, data_dir)
                 result_poster_urls = [_internal_url(store, crop_res.url)]
             else:
-                result_poster_urls = _success_first(poster_urls, poster_ok)
+                result_poster_urls = _display_urls(store, poster_urls, poster_ok)
         else:
-            result_poster_urls = _success_first(poster_urls, poster_ok)
+            result_poster_urls = _display_urls(store, poster_urls, poster_ok)
             if poster_candidate_local:
                 for url in poster_urls:
                     res = await store.get_by_url(url)
@@ -178,7 +193,7 @@ async def materialize_images(
 
     out = MaterializedImages(
         poster_urls=result_poster_urls,
-        thumb_urls=_success_first(thumb_urls, thumb_ok),
+        thumb_urls=_display_urls(store, thumb_urls, thumb_ok),
         trailer_urls=_success_first(trailer_urls, trailer_ok),
     )
     logger.debug(

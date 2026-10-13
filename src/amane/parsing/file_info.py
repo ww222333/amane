@@ -31,6 +31,7 @@ class ContentType(StrEnum):
     FC2 = "fc2"
     AMATEUR = "amateur"
     HENTAI = "hentai"
+    MANJU = "manju"
     UNKNOWN = "unknown"
 
 
@@ -437,6 +438,44 @@ def _remove_escape_strings(filename: str, escape_strings: list[str]) -> str:
     return upper.replace("--", "-").strip("-_ .")
 
 
+# 季 / 集尾标: 命中则视为漫剧番号, 刮削用剥尾后的剧名.
+_EPISODE_TAIL_RE = re.compile(
+    r"(?i)[\s._\-]*(?:"
+    r"s\d{1,2}\s*e\s*\d{1,4}"
+    r"|e(?:p(?:isode)?)?\s*\d{1,4}"
+    r"|第\s*\d{1,4}\s*[集话話期]"
+    r"|全\s*\d{1,4}\s*集"
+    r")$"
+)
+
+
+def _strip_episode_tail(name: str) -> tuple[str, bool]:
+    """去掉季集尾标. 返回 (结果, 是否剥过); 剥空则视为未剥."""
+    s = (name or "").strip()
+    if not s:
+        return s, False
+    m = _EPISODE_TAIL_RE.search(s)
+    if m is None:
+        return s, False
+    stripped = s[: m.start()].strip(" ._-\t")
+    if not stripped:
+        return s, False
+    return stripped, True
+
+
+def _try_manju(stem: str, escape: list[str]) -> tuple[str, ContentType] | None:
+    """带季集尾标的剧名 → (剥尾后的番号, manju); 否则 None."""
+    name = stem.strip()
+    name = re.sub(r"[【(（\[].+?[]）)】]", "", name).strip("@. ")
+    for string in escape:
+        if string:
+            name = re.sub(re.escape(string), "", name, flags=re.IGNORECASE)
+    stripped, had = _strip_episode_tail(name)
+    if not had:
+        return None
+    return stripped.strip("-_. "), ContentType.MANJU
+
+
 def _identify(
     stem: str,
     dirs: tuple[str, ...],
@@ -450,6 +489,8 @@ def _identify(
     for name in reversed(dirs):
         if found := _match(name, escape, generic=False):
             return found
+    if manju := _try_manju(stem, escape):
+        return manju
     if not fallback:
         return None, ContentType.UNKNOWN
     return _fallback(stem, escape)
@@ -610,7 +651,7 @@ def _dir_names(path: Path) -> tuple[str, ...]:
 
 
 def _classify_from_path(stem: str, dir_names: tuple[str, ...]) -> ContentType | None:
-    """getchu 整段相等; 里番/裏番/欧美必须段首, 避免 这里番号 / 非欧美."""
+    """getchu 整段相等; 里番/裏番/欧美/漫剧必须段首, 避免 这里番号 / 非欧美."""
     for name in (stem, *dir_names):
         if name.lower() == "getchu":
             return ContentType.HENTAI
@@ -618,6 +659,8 @@ def _classify_from_path(stem: str, dir_names: tuple[str, ...]) -> ContentType | 
             return ContentType.HENTAI
         if name.startswith("欧美"):
             return ContentType.WESTERN
+        if name.startswith("漫剧"):
+            return ContentType.MANJU
     return None
 
 

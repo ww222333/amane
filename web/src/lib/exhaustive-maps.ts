@@ -71,6 +71,7 @@ export const CONTENT_TYPES = exhaustiveTuple<ContentType>()(
   "fc2",
   "amateur",
   "hentai",
+  "manju",
   "unknown",
 );
 

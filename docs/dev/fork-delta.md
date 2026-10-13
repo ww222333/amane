@@ -4,10 +4,11 @@
 > 本文只列**本仓库相对该上游多出的产品能力**. 机制细节见交叉链接; 字段与签名以源码 / OpenAPI 为准.
 > 上游已有且本仓库已并入的能力 (播放、Android 客户端、LLM、桌面环境变量配置等) 不在此重复.
 
-## 未知内容类型与路由
+## 未知 / 漫剧内容类型与路由
 
 - 解析无法识别番号 / 文件名时, 内容类型为 `unknown` (上游对应回退为 `western`).
 - `content_routes.unknown` 可单独配置站点链; 默认空列表, 未配置则该类型刮削不请求任何站.
+- 文件名带季 / 集尾标 (`S01E31` / `第N集` / `EPxx` 等) 时归为 `manju` (漫剧), 番号剥掉尾标只留剧名; 目录段首「漫剧」可覆盖类型. `content_routes.manju` 默认 `mdcx.huangguoai` → `mdcx.javday` (插件未安装时刮削跳过该来源).
 
 见 [content-routes.md](content-routes.md)、[config.md](config.md).
 

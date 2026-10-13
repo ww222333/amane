@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.16
+
+### 修复
+
+- **发版 Docker `pnpm build`**: 重新导出 OpenAPI 并生成含 `testPlugin` 的 TS client, 修复镜像构建因缺 `testPluginMutation` 失败
+
 ## v1.0.15
 
 ### 新功能

@@ -2959,6 +2959,14 @@ export type OrganizeResult = {
      */
     pruned_dirs: number;
     /**
+     * Leftovers Trashed
+     */
+    leftovers_trashed?: number;
+    /**
+     * Failed Moved
+     */
+    failed_moved?: number;
+    /**
      * Conflicts
      */
     conflicts: Array<OrganizeConflict>;

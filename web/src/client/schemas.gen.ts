@@ -2892,7 +2892,10 @@ export const HotSettingsSchema = {
                     },
                     manju: {
                         prefixes: [],
-                        sites: []
+                        sites: [
+                            'mdcx.huangguoai',
+                            'mdcx.javday'
+                        ]
                     },
                     uncensored: {
                         prefixes: [],
@@ -6053,6 +6056,16 @@ export const OrganizeResultSchema = {
         pruned_dirs: {
             type: 'integer',
             title: 'Pruned Dirs'
+        },
+        leftovers_trashed: {
+            type: 'integer',
+            title: 'Leftovers Trashed',
+            default: 0
+        },
+        failed_moved: {
+            type: 'integer',
+            title: 'Failed Moved',
+            default: 0
         },
         conflicts: {
             items: {

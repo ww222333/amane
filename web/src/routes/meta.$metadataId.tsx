@@ -825,7 +825,7 @@ function TitleDetailPage() {
             >
               {t("merge.title")}
             </Button>
-            {(data.episodes.length > 0 || item.episode_count != null) && (
+            {((data.episodes?.length ?? 0) > 0 || item.episode_count != null) && (
               <Button
                 size="xs"
                 variant="light"
@@ -864,7 +864,7 @@ function TitleDetailPage() {
             <Group gap="xs">
               <Text size="sm" c="dimmed">
                 {t("detail.episodeCount", {
-                  count: item.episode_count ?? data.episodes.length,
+                  count: item.episode_count ?? data.episodes?.length ?? 0,
                 })}
               </Text>
               <Button
@@ -878,7 +878,7 @@ function TitleDetailPage() {
             </Group>
           </Group>
           <Stack gap={6} mah={360} style={{ overflow: "auto" }}>
-            {data.episodes.map((ep) => {
+            {(data.episodes ?? []).map((ep) => {
               const label =
                 (ep.title || "").trim() || t("detail.episodeUntitled", { n: ep.episode });
               const hasFile = (ep.media_file_ids?.length ?? 0) > 0;
@@ -999,7 +999,7 @@ function TitleDetailPage() {
 
       <EpisodeCompareDialog
         metadata={item}
-        episodes={data.episodes}
+        episodes={data.episodes ?? []}
         opened={episodeCompareOpen}
         onClose={() => setEpisodeCompareOpen(false)}
         onApplied={invalidateDetail}

@@ -152,7 +152,7 @@ export function EpisodeCompareDialog({
   onClose,
   onApplied,
 }: EpisodeCompareDialogProps) {
-  const { t } = useTranslation("metadata");
+  const { t } = useTranslation(["metadata", "common"]);
   const queryClient = useQueryClient();
   const [selectedSource, setSelectedSource] = useState<string | null>(null);
 

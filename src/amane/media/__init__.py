@@ -9,7 +9,7 @@ from .images import (
     should_crop_poster,
     validate_crop_box,
 )
-from .nfo import write_nfo
+from .nfo import write_episode_nfo, write_nfo, write_tvshow_nfo
 from .pipeline import MaterializedImages, manual_crop_image, materialize_images
 from .resource_store import AcquireResult, ResourceStore, UpscaleOutcome, derived_locator
 
@@ -30,5 +30,7 @@ __all__ = [
     "probe_size",
     "should_crop_poster",
     "validate_crop_box",
+    "write_episode_nfo",
     "write_nfo",
+    "write_tvshow_nfo",
 ]

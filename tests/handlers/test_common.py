@@ -151,6 +151,45 @@ class TestFinalizeMediaFile:
         assert updated is not None
         assert updated.status == MediaFileStatus.SCRAPED
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("filename", "season", "episode"),
+        [
+            ("高三爱情故事.S01E31.mp4", 1, 31),
+            ("某剧.S02E05.mp4", 2, 5),
+            ("某剧.EP03.mp4", 1, 3),
+            ("某剧.第12集.mp4", 1, 12),
+        ],
+    )
+    async def test_binds_episode_from_season_episode(
+        self, repo: Repository, filename: str, season: int, episode: int
+    ) -> None:
+        meta = await repo.upsert_metadata(number="某剧")
+        assert meta.id is not None
+        media = await repo.create_media_file(library_id=1, path=f"/m/{filename}")
+        assert media.id is not None
+        await finalize_media_file(repo, media.id, metadata_id=meta.id)
+
+        updated = await repo.get_media_file(media.id)
+        assert updated is not None
+        assert updated.episode_id is not None
+        ep = await repo.get_episode(updated.episode_id)
+        assert ep is not None
+        assert ep.season == season
+        assert ep.episode == episode
+
+    @pytest.mark.asyncio
+    async def test_no_episode_bind_for_disc_only(self, repo: Repository) -> None:
+        meta = await repo.upsert_metadata(number="MIDV-123")
+        assert meta.id is not None
+        media = await repo.create_media_file(library_id=1, path="/m/MIDV-123-CD2.mp4")
+        assert media.id is not None
+        await finalize_media_file(repo, media.id, metadata_id=meta.id)
+
+        updated = await repo.get_media_file(media.id)
+        assert updated is not None
+        assert updated.episode_id is None
+
 
 class TestExternalSubtitle:
     """登记与改 path 时的同目录字幕检查."""

@@ -28,6 +28,7 @@ from ...handlers import (
     UpscalePayload,
     UpscaleResult,
 )
+from ...handlers.models import resolve_library_scrape_content_type
 from ...parsing import ContentType, infer_content_type, parse_file_info
 
 
@@ -176,30 +177,63 @@ class ScrapeRequest(BaseModel):
         return self
 
     async def resolve(self, repo: Repository) -> ScrapePayload:
-        """media 不存在时抛 HTTPException(404)."""
+        """media 不存在时抛 HTTPException(404).
+
+        请求显式带 content_type 时锁定; 否则有 media 时尊重所属库的 content_type.
+        """
         if self.media_id is not None:
             media = await repo.get_media_file(self.media_id)
             if media is None:
                 raise HTTPException(status_code=404, detail=f"媒体文件 {self.media_id} 不存在")
+            library = await repo.get_library(media.library_id)
             if self.number is not None:
+                if self.content_type is not None:
+                    return ScrapePayload(
+                        number=self.number,
+                        content_type=self.content_type,
+                        media_file_id=self.media_id,
+                        use_cache=self.use_cache,
+                        lock_content_type=True,
+                    )
+                content_type, locked = resolve_library_scrape_content_type(
+                    library, inferred=infer_content_type(self.number)
+                )
                 return ScrapePayload(
                     number=self.number,
-                    content_type=self.content_type or infer_content_type(self.number),
+                    content_type=content_type,
                     media_file_id=self.media_id,
                     use_cache=self.use_cache,
+                    lock_content_type=locked,
                 )
             parsed = parse_file_info(media.path)
             assert parsed.number is not None
+            if self.content_type is not None:
+                return ScrapePayload(
+                    number=parsed.number,
+                    content_type=self.content_type,
+                    media_file_id=self.media_id,
+                    use_cache=self.use_cache,
+                    lock_content_type=True,
+                )
+            content_type, locked = resolve_library_scrape_content_type(library, inferred=parsed.content_type)
             return ScrapePayload(
                 number=parsed.number,
-                content_type=self.content_type or parsed.content_type,
+                content_type=content_type,
                 media_file_id=self.media_id,
                 use_cache=self.use_cache,
+                lock_content_type=locked,
             )
         assert self.number is not None
+        if self.content_type is not None:
+            return ScrapePayload(
+                number=self.number,
+                content_type=self.content_type,
+                use_cache=self.use_cache,
+                lock_content_type=True,
+            )
         return ScrapePayload(
             number=self.number,
-            content_type=self.content_type or infer_content_type(self.number),
+            content_type=infer_content_type(self.number),
             use_cache=self.use_cache,
         )
 

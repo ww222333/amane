@@ -461,6 +461,8 @@ _ROUNDTRIP = [
                 "fanart_template",
                 "extrafanart_template",
                 "nfo_template",
+                "tvshow_nfo_template",
+                "episode_nfo_template",
                 "trailer_template",
                 "subtitle_template",
                 "strm_content_template",

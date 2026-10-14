@@ -104,10 +104,18 @@ def place_subtitles(
 def _belongs(video: FileInfo, sub: FileInfo) -> bool:
     if sub.number is not None and (video.number is None or sub.number.casefold() != video.number.casefold()):
         return False
-    return _cd_belongs(video.cd, sub.cd)
+    return _cd_belongs(video.cd, sub.cd) and _season_episode_belongs(video, sub)
 
 
 def _cd_belongs(video_cd: int | None, sub_cd: int | None) -> bool:
     if sub_cd == video_cd:
         return True
     return video_cd == 1 and sub_cd is None
+
+
+def _season_episode_belongs(video: FileInfo, sub: FileInfo) -> bool:
+    """季集配对: 同季同集; 或视频为 S01E01 且字幕无季集标记."""
+    if video.season == sub.season and video.episode == sub.episode:
+        return True
+    video_first = (video.season is None or video.season == 1) and video.episode == 1
+    return video_first and sub.season is None and sub.episode is None

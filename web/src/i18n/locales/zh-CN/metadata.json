@@ -85,6 +85,11 @@
     "connections": "关联文件",
     "noFiles": "无关联文件",
     "openInLibrary": "在媒体库中查看",
+    "episodes": "分集",
+    "episodeCount": "共 {{count}} 集",
+    "episodeUntitled": "第 {{n}} 集",
+    "episodeHasFile": "已关联文件",
+    "episodeNoFile": "无文件",
     "userTags": "用户标签",
     "noUserTags": "暂无用户标签",
     "selectUserTag": "选择或输入用户标签…",
@@ -358,6 +363,19 @@
     "changedCount": "已修改 {{count}} 个字段",
     "noChanges": "无修改",
     "loadImages": "加载图片"
+  },
+  "episodeCompare": {
+    "title": "分集来源对比",
+    "empty": "无分集原始数据可对比",
+    "hint": "对照各站 raw 与库内合并结果; 选用某一来源后可整表覆盖写入分集 (不删除已有集行)",
+    "merged": "合并结果",
+    "episodeCol": "集",
+    "noTitle": "无单集标题",
+    "countOnly": "仅总集数覆盖",
+    "pickSource": "选用分集数据源",
+    "selected": "已选",
+    "apply": "应用所选来源",
+    "applied": "已按所选来源更新分集"
   },
   "lock": {
     "manage": "字段锁定",

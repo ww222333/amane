@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from ..config import HotSettings, WatermarkConfig
-from ..db.models import Library, MediaFile
+from ..db.models import Episode, Library, MediaFile
 from ..db.repo_types import MediaFileUpdates
 from ..enums import ActorGender, DownloadableResource, LinkMode
 from ..library import (
@@ -21,6 +21,7 @@ from ..library import (
 )
 from ..library.rules import is_in_fail_dir, is_in_trash, validate_fail_dir
 from ..media import ResourceStore, apply_cover_watermarks_from_info, crop_poster
+from ..media import write_episode_nfo, write_tvshow_nfo
 from ..media import write_nfo as write_nfo_file
 from ..media.resource_store import internal_url_hash
 from ..net.http import WebClient
@@ -41,7 +42,7 @@ from ..organize import (
 )
 from ..organize.file import OrganizeResult as DiskOrganizeResult
 from ..organize.link import create_video_link
-from ..parsing import FileInfo, parse_file_info
+from ..parsing import ContentType, FileInfo, parse_file_info
 from ..utils.path import existing_disk_path as existing_disk_path_sync
 from ..utils.path import is_descendant, nfc_path, path_is_under
 from ..utils.threads import existing_disk_path, in_thread, path_is_dir
@@ -92,6 +93,7 @@ async def execute_file_operations(
     safe_dirs: Sequence[Path] | None = (),
     watermark_dir: Path | None = None,
     actor_genders: dict[str, ActorGender] | None = None,
+    episode: Episode | None = None,
 ) -> FileOperationsResult:
     source_path = await existing_disk_path(Path(media_file.path))
     if source_path is None:
@@ -164,9 +166,27 @@ async def execute_file_operations(
         if link_result.outcome is not PlaceOutcome.PLACED:
             return FileOperationsResult(outcome=PlaceOutcome.FAILED, dest=org_result.dest, error=link_result.error)
 
-    # 写入 NFO.
+    # 写入 NFO: 漫剧写剧级 + 分集; 影片写 movie.
     if org_result.outcome is PlaceOutcome.PLACED and org_result.dest and write_nfo:
-        await write_nfo_file(metadata, paths.nfo)
+        if media_file.content_type is ContentType.MANJU:
+            if paths.tvshow_nfo is not None:
+                await write_tvshow_nfo(metadata, paths.tvshow_nfo)
+            if episode is not None:
+                season = episode.season
+                episode_num: int | None = episode.episode
+            else:
+                season = info.season if info.season is not None and info.season >= 1 else 1
+                episode_num = info.episode
+            if paths.episode_nfo is not None and episode_num is not None:
+                await write_episode_nfo(
+                    metadata,
+                    paths.episode_nfo,
+                    season=season,
+                    episode=episode_num,
+                    episode_row=episode,
+                )
+        else:
+            await write_nfo_file(metadata, paths.nfo)
 
     # 字幕按模板落到 video_dest 侧.
     subtitle_conflicts: list[SubtitleConflict] = []
@@ -232,6 +252,7 @@ async def apply_file_operations(
         safe_dirs=safe_dirs,
         actor_genders=actor_genders,
     )
+    episode = await repo.get_episode(media_file.episode_id) if media_file.episode_id is not None else None
     return await execute_file_operations(
         media_file=media_file,
         metadata=metadata,
@@ -248,6 +269,7 @@ async def apply_file_operations(
         safe_dirs=safe_dirs,
         watermark_dir=watermark_dir,
         actor_genders=actor_genders,
+        episode=episode,
     )
 
 

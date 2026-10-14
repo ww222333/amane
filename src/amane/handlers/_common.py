@@ -89,7 +89,26 @@ async def ensure_oshash(repo: Repository, media: MediaFile) -> str | None:
 
 
 async def finalize_media_file(repo: Repository, media_file_id: int | None, metadata_id: int | None) -> None:
-    """media_file_id 为 None 时静默跳过."""
+    """media_file_id 为 None 时静默跳过.
+
+    若路径解析出集号且已有 metadata, 确保 Episode 行存在并写入 ``episode_id``.
+    """
     if media_file_id is None:
         return
-    await repo.update_media_file(media_file_id, status=MediaFileStatus.SCRAPED, metadata_id=metadata_id)
+    episode_id: int | None = None
+    if metadata_id is not None:
+        media = await repo.get_media_file(media_file_id)
+        if media is not None:
+            from ..parsing import parse_file_info
+
+            info = parse_file_info(media.path)
+            if info.episode is not None and info.episode >= 1:
+                season = info.season if info.season is not None and info.season >= 1 else 1
+                ep = await repo.ensure_episode(metadata_id, season=season, episode=info.episode)
+                episode_id = ep.id
+    await repo.update_media_file(
+        media_file_id,
+        status=MediaFileStatus.SCRAPED,
+        metadata_id=metadata_id,
+        episode_id=episode_id,
+    )

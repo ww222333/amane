@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Amane API",
-    "version": "1.0.15"
+    "version": "1.0.18"
   },
   "paths": {
     "/api/health": {
@@ -1567,6 +1567,59 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/MetadataResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/metadata/{metadata_id}/episodes/apply": {
+      "post": {
+        "tags": [
+          "metadata"
+        ],
+        "summary": "Apply Episodes From Source",
+        "description": "选用 raw 中某一来源的分集覆盖写入; 返回与 GET 详情同形 (含 episodes).",
+        "operationId": "apply_episodes_from_source",
+        "parameters": [
+          {
+            "name": "metadata_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Metadata Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyEpisodesRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetadataDetailResponse"
                 }
               }
             }
@@ -7183,6 +7236,22 @@
         ],
         "title": "ApiType"
       },
+      "ApplyEpisodesRequest": {
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Source",
+            "description": "raw 中的来源键, 如 mdcx.huangguoai"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source"
+        ],
+        "title": "ApplyEpisodesRequest",
+        "description": "选用 ``Metadata.raw`` 中某一来源的分集覆盖写入 ``Episode`` 表."
+      },
       "ApprovalsRow": {
         "properties": {
           "seq": {
@@ -7914,6 +7983,88 @@
         ],
         "title": "DownloadableResource",
         "description": "影片附属资源类型: 刮削写入 Resource, 整理时按库配置复制到库路径."
+      },
+      "EpisodeResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "metadata_id": {
+            "type": "integer",
+            "title": "Metadata Id"
+          },
+          "season": {
+            "type": "integer",
+            "title": "Season"
+          },
+          "episode": {
+            "type": "integer",
+            "title": "Episode"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "plot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plot"
+          },
+          "media_file_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Media File Ids",
+            "default": []
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "metadata_id",
+          "season",
+          "episode"
+        ],
+        "title": "EpisodeResponse"
       },
       "ErrorRow": {
         "properties": {
@@ -9016,6 +9167,7 @@
                   "prefixes": [],
                   "sites": [
                     "mdcx.huangguoai",
+                    "mdcx.huangguodrama",
                     "mdcx.javday"
                   ]
                 },
@@ -10019,7 +10171,7 @@
           "video_template": {
             "type": "string",
             "title": "Video Template",
-            "default": "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}"
+            "default": "{studio}/{number}/{number}[.S{season?}E{episode?}][-CD{cd?}][-{sub?}].{ext}"
           },
           "link_template": {
             "anyOf": [
@@ -10101,6 +10253,28 @@
               }
             ],
             "title": "Nfo Template"
+          },
+          "tvshow_nfo_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvshow Nfo Template"
+          },
+          "episode_nfo_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Nfo Template"
           },
           "trailer_template": {
             "anyOf": [
@@ -10351,6 +10525,28 @@
               }
             ],
             "title": "Nfo Template"
+          },
+          "tvshow_nfo_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvshow Nfo Template"
+          },
+          "episode_nfo_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Nfo Template"
           },
           "trailer_template": {
             "anyOf": [
@@ -10647,6 +10843,28 @@
               }
             ],
             "title": "Nfo Template"
+          },
+          "tvshow_nfo_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tvshow Nfo Template"
+          },
+          "episode_nfo_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Nfo Template"
           },
           "trailer_template": {
             "anyOf": [
@@ -10972,6 +11190,17 @@
             ],
             "title": "Metadata Id"
           },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id"
+          },
           "created_at": {
             "anyOf": [
               {
@@ -11232,6 +11461,14 @@
             },
             "type": "array",
             "title": "Files"
+          },
+          "episodes": {
+            "items": {
+              "$ref": "#/components/schemas/EpisodeResponse"
+            },
+            "type": "array",
+            "title": "Episodes",
+            "default": []
           },
           "user_tags": {
             "items": {
@@ -11605,6 +11842,17 @@
               }
             ],
             "title": "Source Urls"
+          },
+          "episode_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Count"
           }
         },
         "type": "object",
@@ -11843,6 +12091,17 @@
             "title": "Locked Fields",
             "default": []
           },
+          "episode_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Count"
+          },
           "file_count": {
             "type": "integer",
             "title": "File Count",
@@ -12054,6 +12313,14 @@
             "type": "string",
             "title": "Nfo Template"
           },
+          "tvshow_nfo_template": {
+            "type": "string",
+            "title": "Tvshow Nfo Template"
+          },
+          "episode_nfo_template": {
+            "type": "string",
+            "title": "Episode Nfo Template"
+          },
           "trailer_template": {
             "type": "string",
             "title": "Trailer Template"
@@ -12070,6 +12337,8 @@
           "fanart_template",
           "extrafanart_template",
           "nfo_template",
+          "tvshow_nfo_template",
+          "episode_nfo_template",
           "trailer_template",
           "subtitle_template"
         ],

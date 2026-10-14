@@ -10,7 +10,7 @@ from ..parsing import parse_file_info
 from ..utils.path import nfc_path
 from ..utils.threads import path_exists, path_is_dir
 from ._common import register_media_file
-from .models import RefreshPayload, RefreshResult, ScanMode, ScrapePayload
+from .models import RefreshPayload, RefreshResult, ScanMode, ScrapePayload, resolve_library_scrape_content_type
 from .protocol import FollowupTask, TaskHandler, TaskResult
 
 if TYPE_CHECKING:
@@ -138,6 +138,7 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
             parsed = parse_file_info(f.path)
             assert f.id is not None
             assert parsed.number is not None
+            content_type, locked = resolve_library_scrape_content_type(library, inferred=parsed.content_type)
             followups.append(
                 FollowupTask(
                     key=f"scrape:{f.id}",
@@ -145,8 +146,9 @@ class RefreshHandler(TaskHandler[RefreshPayload, RefreshResult]):
                     payload=ScrapePayload(
                         media_file_id=f.id,
                         number=parsed.number,
-                        content_type=parsed.content_type,
+                        content_type=content_type,
                         use_cache=payload.use_cache,
+                        lock_content_type=locked,
                     ).model_dump(mode="json"),
                 )
             )

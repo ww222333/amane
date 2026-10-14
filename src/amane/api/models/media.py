@@ -23,6 +23,7 @@ class MediaFileResponse(BaseModel):
     has_subtitle: bool = False
     definition: str | None = None
     metadata_id: int | None = None
+    episode_id: int | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
 

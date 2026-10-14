@@ -2,6 +2,7 @@ import {
   Accordion,
   Anchor,
   Badge,
+  Box,
   Checkbox,
   Group,
   Input,
@@ -22,6 +23,7 @@ import { useTranslation } from "react-i18next";
 import { getPathTemplateSchemaOptions } from "@/client/@tanstack/react-query.gen";
 import { LibraryCreateRequestSchema, LibraryResponseSchema } from "@/client/schemas.gen";
 import type {
+  ContentType,
   DownloadableResource,
   LibraryAutomation,
   LibraryCreateRequest,
@@ -36,6 +38,7 @@ import { encodeFormBody } from "@/components/schema-form/encode";
 import { EnumToggle } from "@/components/common/enum-toggle";
 import { FieldChrome } from "@/components/schema-form/fields/field-chrome";
 import {
+  CONTENT_TYPES,
   DOWNLOADABLE_RESOURCES,
   LIBRARY_AUTOMATIONS,
   LIBRARY_INGESTS,
@@ -62,11 +65,15 @@ const OPTIONAL_TEMPLATE_KEYS = [
   "fanart_template",
   "extrafanart_template",
   "nfo_template",
+  "tvshow_nfo_template",
+  "episode_nfo_template",
   "trailer_template",
   "subtitle_template",
 ] as const satisfies readonly (keyof OptionalPathTemplateDefaults)[];
 
 const MOVE_MODES: readonly LibraryResponse["move_mode"][] = ["move", "copy", "hardlink", "symlink"];
+
+const CONTENT_TYPE_OPTIONS = ["", ...CONTENT_TYPES] as const;
 
 const BYTES_PER_MB = 1024 * 1024;
 
@@ -109,12 +116,15 @@ export interface LibraryFormState {
   fanart_template: string;
   extrafanart_template: string;
   nfo_template: string;
+  tvshow_nfo_template: string;
+  episode_nfo_template: string;
   trailer_template: string;
   subtitle_template: string;
   automation: LibraryAutomation;
   auto_organize: boolean;
   ingest: LibraryIngest;
   cloud_path: string;
+  content_type: ContentType | "";
   scan: boolean;
 }
 
@@ -141,18 +151,23 @@ export function emptyLibraryForm(schema?: PathTemplateSchemaResponse | null): Li
     subtitle_extensions: (
       schema?.subtitle_extensions_default ?? [".srt", ".ass", ".ssa", ".vtt", ".sub"]
     ).join(", "),
-    video_template: schema?.video_default ?? "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}",
+    video_template:
+      schema?.video_default ??
+      "{studio}/{number}/{number}[.S{season?}E{episode?}][-CD{cd?}][-{sub?}].{ext}",
     thumb_template: defaults?.thumb_template ?? "",
     poster_template: defaults?.poster_template ?? "",
     fanart_template: defaults?.fanart_template ?? "",
     extrafanart_template: defaults?.extrafanart_template ?? "",
     nfo_template: defaults?.nfo_template ?? "",
+    tvshow_nfo_template: defaults?.tvshow_nfo_template ?? "",
+    episode_nfo_template: defaults?.episode_nfo_template ?? "",
     trailer_template: defaults?.trailer_template ?? "",
     subtitle_template: defaults?.subtitle_template ?? "",
     automation: "scrape",
     auto_organize: false,
     ingest: "native",
     cloud_path: "",
+    content_type: "",
     scan: true,
   };
 }
@@ -183,12 +198,15 @@ export function libraryFormFromResponse(lib: LibraryResponse): LibraryFormState 
     fanart_template: lib.fanart_template ?? "",
     extrafanart_template: lib.extrafanart_template ?? "",
     nfo_template: lib.nfo_template ?? "",
+    tvshow_nfo_template: lib.tvshow_nfo_template ?? "",
+    episode_nfo_template: lib.episode_nfo_template ?? "",
     trailer_template: lib.trailer_template ?? "",
     subtitle_template: lib.subtitle_template ?? "",
     automation: lib.automation,
     auto_organize: lib.auto_organize,
     ingest: lib.ingest,
     cloud_path: lib.cloud_path ?? "",
+    content_type: lib.content_type ?? "",
     scan: false,
   };
 }
@@ -264,12 +282,15 @@ function libraryFormValues(form: LibraryFormState): Record<string, unknown> {
     fanart_template: form.fanart_template.trim(),
     extrafanart_template: form.extrafanart_template.trim(),
     nfo_template: form.nfo_template.trim(),
+    tvshow_nfo_template: form.tvshow_nfo_template.trim(),
+    episode_nfo_template: form.episode_nfo_template.trim(),
     trailer_template: form.trailer_template.trim(),
     subtitle_template: form.subtitle_template.trim(),
     automation: form.automation,
     auto_organize: form.auto_organize,
     ingest: form.ingest,
     cloud_path: form.ingest === "clouddrive" ? form.cloud_path.trim() : "",
+    content_type: form.content_type,
   };
 }
 
@@ -294,6 +315,8 @@ const TPL_I18N = {
   fanart_template: "tpl.fanart",
   extrafanart_template: "tpl.extrafanart",
   nfo_template: "tpl.nfo",
+  tvshow_nfo_template: "tpl.tvshowNfo",
+  episode_nfo_template: "tpl.episodeNfo",
   trailer_template: "tpl.trailer",
   subtitle_template: "tpl.subtitle",
 } as const satisfies Record<keyof OptionalPathTemplateDefaults, string>;
@@ -380,6 +403,19 @@ export function LibraryFormFields({ value, onChange, showCreateOnly }: LibraryFo
           />
         )}
       </SimpleGrid>
+      <Input.Wrapper label={t("contentType.label")} description={t("contentType.hint")}>
+        <Box mt="xs">
+          <EnumToggle
+            fullWidth
+            options={CONTENT_TYPE_OPTIONS}
+            value={value.content_type}
+            onChange={(content_type) => onChange({ ...value, content_type })}
+            getLabel={(item) =>
+              item === "" ? t("contentType.unset") : t(`contentType.${item}`)
+            }
+          />
+        </Box>
+      </Input.Wrapper>
       <Stack gap="sm">
         <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="sm">
           <TextInput

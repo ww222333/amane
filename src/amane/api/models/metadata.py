@@ -53,6 +53,7 @@ class MetadataResponse(BaseModel):
     field_sources: dict = {}
     raw: dict = {}
     locked_fields: list[MetadataField] = []
+    episode_count: int | None = None
 
     @field_validator("locked_fields", mode="before")
     @classmethod
@@ -64,6 +65,19 @@ class MetadataResponse(BaseModel):
 
     file_count: int = 0
     file_phase: FilePhaseSummary = Field(default_factory=FilePhaseSummary)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class EpisodeResponse(BaseModel):
+    id: int
+    metadata_id: int
+    season: int
+    episode: int
+    title: str | None = None
+    plot: str | None = None
+    #: 已绑定到本集的 MediaFile id 列表.
+    media_file_ids: list[int] = []
     created_at: datetime | None = None
     updated_at: datetime | None = None
 
@@ -95,6 +109,7 @@ class MetadataListResponse(BaseModel):
 class MetadataDetailResponse(BaseModel):
     metadata: MetadataResponse
     files: list[MediaFileResponse]
+    episodes: list[EpisodeResponse] = []
     user_tags: list[UserTagResponse] = []
     comments: list[CommentResponse] = []
     actor_ids: dict[str, int] = {}
@@ -108,6 +123,12 @@ class MetadataDetailResponse(BaseModel):
 
 class MergeRequest(BaseModel):
     selections: dict[str, str] = Field(description="field_name -> source_key 映射")
+
+
+class ApplyEpisodesRequest(BaseModel):
+    """选用 ``Metadata.raw`` 中某一来源的分集覆盖写入 ``Episode`` 表."""
+
+    source: str = Field(min_length=1, description="raw 中的来源键, 如 mdcx.huangguoai")
 
 
 class MetadataLocksRequest(BaseModel):

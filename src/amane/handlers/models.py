@@ -104,6 +104,19 @@ class ScrapePayload(BaseModel):
     content_type: ContentType = ContentType.CENSORED
     media_file_id: int | None = None
     use_cache: set[CacheKind] = {CacheKind.metadata, CacheKind.trans}
+    lock_content_type: bool = False
+    """True: 调用方已指定类型 (如库 content_type), 刮削时不再做前缀覆盖."""
+
+
+def resolve_library_scrape_content_type(
+    library: Library | None,
+    *,
+    inferred: ContentType,
+) -> tuple[ContentType, bool]:
+    """库指定了 content_type 则固定该路由并锁定; 否则返回推断结果且不锁定."""
+    if library is not None and library.content_type is not None:
+        return library.content_type, True
+    return inferred, False
 
 
 def build_feed_scrape_payload(feed: Feed, number: str) -> ScrapePayload:
@@ -121,6 +134,7 @@ def build_feed_scrape_payload(feed: Feed, number: str) -> ScrapePayload:
         content_type=content_type,
         media_file_id=None,
         use_cache=use_cache,
+        lock_content_type=feed.content_type is not None,
     )
 
 

@@ -265,6 +265,7 @@ class MetadataFields(TypedDict, total=False):
     source_urls: dict[str, str]
     field_sources: dict[str, str]
     raw: dict[str, dict[str, object]]
+    episode_count: int | None
 
 
 class MediaFileUpdates(TypedDict, total=False):
@@ -276,6 +277,7 @@ class MediaFileUpdates(TypedDict, total=False):
     codec: str | None
     status: MediaFileStatus
     metadata_id: int | None
+    episode_id: int | None
     has_external_subtitle: bool
 
 
@@ -286,6 +288,7 @@ class LibraryUpdates(TypedDict, total=False):
     auto_organize: bool
     ingest: LibraryIngest
     cloud_path: str | None
+    content_type: ContentType | None
     recursive: bool
     patterns: list[str]
     move_mode: MoveMode
@@ -298,6 +301,8 @@ class LibraryUpdates(TypedDict, total=False):
     fanart_template: str | None
     extrafanart_template: str | None
     nfo_template: str | None
+    tvshow_nfo_template: str | None
+    episode_nfo_template: str | None
     trailer_template: str | None
     subtitle_template: str | None
     subtitle_extensions: list[str]

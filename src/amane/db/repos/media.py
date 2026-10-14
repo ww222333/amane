@@ -213,6 +213,8 @@ class MediaRepoMixin(RepositoryMixinBase):
                 media.status = updates["status"]
             if "metadata_id" in updates:
                 media.metadata_id = updates["metadata_id"]
+            if "episode_id" in updates:
+                media.episode_id = updates["episode_id"]
             if "has_external_subtitle" in updates:
                 media.has_external_subtitle = updates["has_external_subtitle"]
             media.updated_at = _utcnow()

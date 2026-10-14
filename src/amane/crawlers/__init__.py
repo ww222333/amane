@@ -12,7 +12,7 @@ from .actor import (
 )
 from .base import Crawler
 from .http import HttpClient
-from .models import FetchOptions, FilmActor, MediaMetadata, film_actors
+from .models import EpisodeInfo, FetchOptions, FilmActor, MediaMetadata, film_actors
 from .registry import registry
 from .sites import (
     AiravCrawler,
@@ -83,6 +83,7 @@ __all__ = [
     "FC2PPVDBCrawler",
     "FalenoCrawler",
     "FetchOptions",
+    "EpisodeInfo",
     "FilmActor",
     "FreejavbtCrawler",
     "GFriendsActorCrawler",

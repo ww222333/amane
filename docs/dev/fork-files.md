@@ -96,4 +96,4 @@
 
 | 位置 | 角色 |
 |------|------|
-| `amane-mdcx-plugins` (独立仓库) | `mdcx.huangguoai` 解密封面与 `amane-local`; `mdcx.javday` 漫剧 / 简繁等 |
+| `amane-mdcx-plugins` (独立仓库) | `mdcx.huangguoai` 解密封面与 `amane-local`; `mdcx.huangguodrama` (huangguodrama.ai HTML); `mdcx.javday` 漫剧 / 简繁等 |

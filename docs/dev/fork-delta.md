@@ -9,7 +9,8 @@
 
 - 解析无法识别番号 / 文件名时, 内容类型为 `unknown` (上游对应回退为 `western`).
 - `content_routes.unknown` 可单独配置站点链; 默认空列表, 未配置则该类型刮削不请求任何站.
-- 文件名带季 / 集尾标 (`S01E31` / `第N集` / `EPxx` 等) 时归为 `manju` (漫剧), 番号剥掉尾标只留剧名; 目录段首「漫剧」可覆盖类型. `content_routes.manju` 默认 `mdcx.huangguoai` → `mdcx.javday` (插件未安装时刮削跳过该来源).
+- 文件名带季 / 集尾标 (`S01E31` / `第N集` / `EPxx` 等) 时归为 `manju` (漫剧), 番号剥掉尾标只留剧名; 目录段首「漫剧」可覆盖类型. `content_routes.manju` 默认 `mdcx.huangguoai` → `mdcx.huangguodrama` → `mdcx.javday` (插件未安装时刮削跳过该来源).
+- 漫剧以一部剧一条 `Metadata` 列表展示; 分集存 `Episode` 表 (`title` 可空); 刮削写入 `episode_count` / `episodes[]` 后详情页列出分集; 文件名季集绑定 `MediaFile.episode_id`. 路径模板用 `{season?}` / `{episode?}` (与多碟 `{cd?}` 分离); ORGANIZE 写剧级 / 分集 NFO (`tvshow_nfo_template` / `episode_nfo_template`), 与影片 `nfo_template` 分离. 见 [data-model.md](data-model.md).
 
 见 [content-routes.md](content-routes.md)、[config.md](config.md).
 
@@ -17,8 +18,9 @@
 
 - 每个内容类型的路由为 `{sites, prefixes}`, 而非仅站点列表.
 - `prefixes` 命中番号时, 覆盖推断出的 `content_type`, 并采用该类型的 `sites` (多命中取最长前缀).
+- 媒体库可设 `content_type`: 指定后该库 SCRAPE 固定走此路由并锁定 (跳过推断与前缀覆盖); 未指定则沿用上述规则.
 
-见 [config.md](config.md)、[task-system.md](task-system.md)「建图」.
+见 [config.md](config.md)、[task-system.md](task-system.md)「建图」、[data-model.md](data-model.md).
 
 ## 整理失败目录
 

@@ -24,6 +24,7 @@ import {
   IconExternalLink,
   IconFolders,
   IconGitMerge,
+  IconListNumbers,
   IconLock,
   IconLockOpen,
   IconPencil,
@@ -61,6 +62,7 @@ import { UserTagActions } from "@/components/media/user-tag-add";
 import { FanartLightbox, FanartStrip } from "@/components/media/fanart-lightbox";
 import { FilePhaseBadges, FilePhaseOverlay } from "@/components/media/file-phase-badges";
 import { PosterCropDialog } from "@/components/media/poster-crop-dialog";
+import { EpisodeCompareDialog } from "@/components/metadata/episode-compare-dialog";
 import { MergeDialog } from "@/components/metadata/merge-dialog";
 import { type JSONSchemaObject, resolveSchema } from "@/components/schema-form/schema";
 import { SchemaForm } from "@/components/schema-form/schema-form";
@@ -123,6 +125,7 @@ function TitleDetailPage() {
   const navigate = useNavigate();
   const [editOpen, setEditOpen] = useState(false);
   const [mergeOpen, setMergeOpen] = useState(false);
+  const [episodeCompareOpen, setEpisodeCompareOpen] = useState(false);
   const [cropOpen, setCropOpen] = useState(false);
   const [coverLightboxOpen, coverLightbox] = useDisclosure(false);
   const [playingTrailer, setPlayingTrailer] = useState(false);
@@ -822,6 +825,17 @@ function TitleDetailPage() {
             >
               {t("merge.title")}
             </Button>
+            {(data.episodes.length > 0 || item.episode_count != null) && (
+              <Button
+                size="xs"
+                variant="light"
+                color="indigo"
+                leftSection={<IconListNumbers size={14} />}
+                onClick={() => setEpisodeCompareOpen(true)}
+              >
+                {t("episodeCompare.title")}
+              </Button>
+            )}
             <Button
               size="xs"
               variant="light"
@@ -842,6 +856,55 @@ function TitleDetailPage() {
         onSeekHandled={() => setSeekRequest(null)}
         onCanSeekChange={setCanSeek}
       />
+
+      {(data.episodes?.length ?? 0) > 0 && (
+        <Card withBorder radius="md" p="md">
+          <Group justify="space-between" mb="sm">
+            <Title order={5}>{t("detail.episodes")}</Title>
+            <Group gap="xs">
+              <Text size="sm" c="dimmed">
+                {t("detail.episodeCount", {
+                  count: item.episode_count ?? data.episodes.length,
+                })}
+              </Text>
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                leftSection={<IconListNumbers size={14} />}
+                onClick={() => setEpisodeCompareOpen(true)}
+              >
+                {t("episodeCompare.title")}
+              </Button>
+            </Group>
+          </Group>
+          <Stack gap={6} mah={360} style={{ overflow: "auto" }}>
+            {data.episodes.map((ep) => {
+              const label =
+                (ep.title || "").trim() || t("detail.episodeUntitled", { n: ep.episode });
+              const hasFile = (ep.media_file_ids?.length ?? 0) > 0;
+              return (
+                <Group key={ep.id} justify="space-between" gap="xs" wrap="nowrap">
+                  <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
+                    <Text size="sm" truncate="end">
+                      {ep.season > 1 ? `S${ep.season}E${ep.episode}` : `E${ep.episode}`}
+                      {" · "}
+                      {label}
+                    </Text>
+                    {ep.plot ? (
+                      <Text size="xs" c="dimmed" lineClamp={2}>
+                        {ep.plot}
+                      </Text>
+                    ) : null}
+                  </Stack>
+                  <Badge size="sm" variant="light" color={hasFile ? "teal" : "gray"}>
+                    {hasFile ? t("detail.episodeHasFile") : t("detail.episodeNoFile")}
+                  </Badge>
+                </Group>
+              );
+            })}
+          </Stack>
+        </Card>
+      )}
 
       {/* 宽屏下并排, 窄屏落回上下叠放; 各自保持自然高度, 拉平会把空白挪进较短的一栏. */}
       <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" style={{ alignItems: "start" }}>
@@ -932,6 +995,14 @@ function TitleDetailPage() {
         opened={mergeOpen}
         onClose={() => setMergeOpen(false)}
         onMerged={invalidateDetail}
+      />
+
+      <EpisodeCompareDialog
+        metadata={item}
+        episodes={data.episodes}
+        opened={episodeCompareOpen}
+        onClose={() => setEpisodeCompareOpen(false)}
+        onApplied={invalidateDetail}
       />
 
       {thumbSrc && (

@@ -1005,6 +1005,23 @@ export const ApiTypeSchema = {
     title: 'ApiType'
 } as const;
 
+export const ApplyEpisodesRequestSchema = {
+    properties: {
+        source: {
+            type: 'string',
+            minLength: 1,
+            title: 'Source',
+            description: 'raw 中的来源键, 如 mdcx.huangguoai'
+        }
+    },
+    type: 'object',
+    required: [
+        'source'
+    ],
+    title: 'ApplyEpisodesRequest',
+    description: '选用 ``Metadata.raw`` 中某一来源的分集覆盖写入 ``Episode`` 表.'
+} as const;
+
 export const ApprovalsRowSchema = {
     properties: {
         seq: {
@@ -1761,6 +1778,89 @@ export const DownloadableResourceSchema = {
     ],
     title: 'DownloadableResource',
     description: '影片附属资源类型: 刮削写入 Resource, 整理时按库配置复制到库路径.'
+} as const;
+
+export const EpisodeResponseSchema = {
+    properties: {
+        id: {
+            type: 'integer',
+            title: 'Id'
+        },
+        metadata_id: {
+            type: 'integer',
+            title: 'Metadata Id'
+        },
+        season: {
+            type: 'integer',
+            title: 'Season'
+        },
+        episode: {
+            type: 'integer',
+            title: 'Episode'
+        },
+        title: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        plot: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Plot'
+        },
+        media_file_ids: {
+            items: {
+                type: 'integer'
+            },
+            type: 'array',
+            title: 'Media File Ids',
+            default: []
+        },
+        created_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Created At'
+        },
+        updated_at: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'date-time'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Updated At'
+        }
+    },
+    type: 'object',
+    required: [
+        'id',
+        'metadata_id',
+        'season',
+        'episode'
+    ],
+    title: 'EpisodeResponse'
 } as const;
 
 export const ErrorRowSchema = {
@@ -2894,6 +2994,7 @@ export const HotSettingsSchema = {
                         prefixes: [],
                         sites: [
                             'mdcx.huangguoai',
+                            'mdcx.huangguodrama',
                             'mdcx.javday'
                         ]
                     },
@@ -3908,7 +4009,7 @@ export const LibraryCreateRequestSchema = {
         video_template: {
             type: 'string',
             title: 'Video Template',
-            default: '{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}'
+            default: '{studio}/{number}/{number}[.S{season?}E{episode?}][-CD{cd?}][-{sub?}].{ext}'
         },
         link_template: {
             anyOf: [
@@ -3990,6 +4091,28 @@ export const LibraryCreateRequestSchema = {
                 }
             ],
             title: 'Nfo Template'
+        },
+        tvshow_nfo_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Tvshow Nfo Template'
+        },
+        episode_nfo_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Episode Nfo Template'
         },
         trailer_template: {
             anyOf: [
@@ -4243,6 +4366,28 @@ export const LibraryResponseSchema = {
                 }
             ],
             title: 'Nfo Template'
+        },
+        tvshow_nfo_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Tvshow Nfo Template'
+        },
+        episode_nfo_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Episode Nfo Template'
         },
         trailer_template: {
             anyOf: [
@@ -4540,6 +4685,28 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Nfo Template'
+        },
+        tvshow_nfo_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Tvshow Nfo Template'
+        },
+        episode_nfo_template: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Episode Nfo Template'
         },
         trailer_template: {
             anyOf: [
@@ -4869,6 +5036,17 @@ export const MediaFileResponseSchema = {
             ],
             title: 'Metadata Id'
         },
+        episode_id: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Episode Id'
+        },
         created_at: {
             anyOf: [
                 {
@@ -5139,6 +5317,14 @@ export const MetadataDetailResponseSchema = {
             },
             type: 'array',
             title: 'Files'
+        },
+        episodes: {
+            items: {
+                $ref: '#/components/schemas/EpisodeResponse'
+            },
+            type: 'array',
+            title: 'Episodes',
+            default: []
         },
         user_tags: {
             items: {
@@ -5516,6 +5702,17 @@ export const MetadataPartialSchema = {
                 }
             ],
             title: 'Source Urls'
+        },
+        episode_count: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Episode Count'
         }
     },
     type: 'object',
@@ -5755,6 +5952,17 @@ export const MetadataResponseSchema = {
             title: 'Locked Fields',
             default: []
         },
+        episode_count: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Episode Count'
+        },
         file_count: {
             type: 'integer',
             title: 'File Count',
@@ -5972,6 +6180,14 @@ export const OptionalPathTemplateDefaultsSchema = {
             type: 'string',
             title: 'Nfo Template'
         },
+        tvshow_nfo_template: {
+            type: 'string',
+            title: 'Tvshow Nfo Template'
+        },
+        episode_nfo_template: {
+            type: 'string',
+            title: 'Episode Nfo Template'
+        },
         trailer_template: {
             type: 'string',
             title: 'Trailer Template'
@@ -5988,6 +6204,8 @@ export const OptionalPathTemplateDefaultsSchema = {
         'fanart_template',
         'extrafanart_template',
         'nfo_template',
+        'tvshow_nfo_template',
+        'episode_nfo_template',
         'trailer_template',
         'subtitle_template'
     ],

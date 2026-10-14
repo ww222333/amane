@@ -196,6 +196,8 @@ class MediaFile(SQLModel, table=True):
     has_external_subtitle: bool = Field(default=False, index=True)
     definition: str | None = Field(default=None, index=True)
     metadata_id: int | None = Field(default=None, foreign_key="metadata.id", index=True)
+    #: 漫剧 / 剧集分集; 与 ``episodes`` 表对齐. 刮削或整理时按文件名集号绑定.
+    episode_id: int | None = Field(default=None, foreign_key="episodes.id", index=True)
     library_id: int = Field(foreign_key="libraries.id", index=True)
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
@@ -252,6 +254,8 @@ class Metadata(SQLModel, table=True):
     locked_fields: list[str] = Field(
         default_factory=list, sa_column=Column(JSON, nullable=False, server_default=text("'[]'"))
     )
+    #: 剧集总集数 (站点声明或分集表行数上界); 漫剧等剧型使用, 影片可空.
+    episode_count: int | None = Field(default=None)
 
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
@@ -289,6 +293,27 @@ def metadata_number_predicate(number: str) -> ColumnElement[bool]:
     无法命中该索引, 计划退化为覆盖索引扫描, 成本随表行数增长.
     """
     return col(Metadata.number).collate("NOCASE") == number
+
+
+class Episode(SQLModel, table=True):
+    """剧集分集行: 挂在 ``Metadata`` 下; ``title`` / ``plot`` 可空 (站点常无单集标题).
+
+    唯一键 ``(metadata_id, season, episode)``. 漫剧默认 ``season=1``, ``episode`` 对应文件名集号 / ``{episode?}``.
+    """
+
+    __tablename__ = "episodes"  # type: ignore[assignment]
+    __table_args__ = (
+        UniqueConstraint("metadata_id", "season", "episode", name="uq_episodes_metadata_season_episode"),
+    )
+
+    id: int | None = Field(default=None, primary_key=True)
+    metadata_id: int = Field(foreign_key="metadata.id", index=True, nullable=False)
+    season: int = Field(default=1, ge=0)
+    episode: int = Field(ge=1)
+    title: str | None = None
+    plot: str | None = None
+    created_at: datetime = Field(default_factory=_utcnow)
+    updated_at: datetime = Field(default_factory=_utcnow)
 
 
 class Task(SQLModel, table=True):
@@ -343,6 +368,8 @@ class Library(SQLModel, table=True):
     """文件发现通道. clouddrive 不 schedule Observer, 由 webhook 按 cloud_path 分流."""
     cloud_path: str | None = None
     """CloudDrive 虚拟路径 (POSIX, 如 /115open/云下载). ingest=clouddrive 时必填."""
+    content_type: ContentType | None = None
+    """刮削内容路由; 非空则该库入队 SCRAPE 固定走此类型, 跳过文件名/番号推断与前缀覆盖. 空则沿用现有推断."""
     recursive: bool = Field(default=True)
     patterns: list[str] = Field(default_factory=list, sa_column=Column(JSON, nullable=False))
     move_mode: MoveMode = Field(default=MoveMode.MOVE)
@@ -358,6 +385,10 @@ class Library(SQLModel, table=True):
     fanart_template: PathTemplate | None = None
     extrafanart_template: PathTemplate | None = None
     nfo_template: PathTemplate | None = None
+    #: 漫剧 / 剧集: 剧级 NFO 路径 (默认 ``{video_dir}/tvshow.nfo``); 空则用默认.
+    tvshow_nfo_template: PathTemplate | None = None
+    #: 漫剧 / 剧集: 单集 NFO 路径 (默认 ``{link_dir}/{video_name}.nfo``); 空则用默认.
+    episode_nfo_template: PathTemplate | None = None
     trailer_template: PathTemplate | None = None
     subtitle_template: PathTemplate | None = None
     subtitle_extensions: SubtitleExtensions = Field(

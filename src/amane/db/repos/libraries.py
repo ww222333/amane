@@ -5,6 +5,7 @@ from sqlmodel import col, select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from ...enums import DownloadableResource, LibraryAutomation, LibraryIngest, LinkMode, MoveMode
+from ...parsing import ContentType
 from ...library import (
     DEFAULT_SUBTITLE_EXTENSIONS,
     DEFAULT_TRAILER_PATTERN,
@@ -57,6 +58,7 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         auto_organize: bool = False,
         ingest: LibraryIngest = LibraryIngest.NATIVE,
         cloud_path: str | None = None,
+        content_type: ContentType | None = None,
         recursive: bool = True,
         patterns: list[str] | None = None,
         move_mode: MoveMode = MoveMode.MOVE,
@@ -69,6 +71,8 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         fanart_template: str | None = None,
         extrafanart_template: str | None = None,
         nfo_template: str | None = None,
+        tvshow_nfo_template: str | None = None,
+        episode_nfo_template: str | None = None,
         trailer_template: str | None = None,
         subtitle_template: str | None = None,
         subtitle_extensions: list[str] | None = None,
@@ -93,6 +97,8 @@ class LibrariesRepoMixin(RepositoryMixinBase):
         fanart_template = _path_template_or_none(fanart_template)
         extrafanart_template = _path_template_or_none(extrafanart_template)
         nfo_template = _path_template_or_none(nfo_template)
+        tvshow_nfo_template = _path_template_or_none(tvshow_nfo_template)
+        episode_nfo_template = _path_template_or_none(episode_nfo_template)
         trailer_template = _path_template_or_none(trailer_template)
         subtitle_template = _path_template_or_none(subtitle_template)
         async with self._session() as session:
@@ -105,6 +111,7 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 auto_organize=auto_organize,
                 ingest=ingest,
                 cloud_path=cloud_path,
+                content_type=content_type,
                 recursive=recursive,
                 patterns=patterns if patterns is not None else [],
                 move_mode=move_mode,
@@ -117,6 +124,8 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 fanart_template=fanart_template,
                 extrafanart_template=extrafanart_template,
                 nfo_template=nfo_template,
+                tvshow_nfo_template=tvshow_nfo_template,
+                episode_nfo_template=episode_nfo_template,
                 trailer_template=trailer_template,
                 subtitle_template=subtitle_template,
                 subtitle_extensions=normalize_subtitle_extensions(
@@ -208,6 +217,8 @@ class LibrariesRepoMixin(RepositoryMixinBase):
             lib.cloud_path = resolve_ingest_cloud_path(lib.ingest, lib.cloud_path)
             if lib.cloud_path is not None:
                 await _reject_overlapping_cloud_path(session, lib.cloud_path, exclude_id=library_id)
+            if "content_type" in updates:
+                lib.content_type = updates["content_type"]
             if "recursive" in updates:
                 lib.recursive = updates["recursive"]
             if "patterns" in updates:
@@ -233,6 +244,10 @@ class LibrariesRepoMixin(RepositoryMixinBase):
                 lib.extrafanart_template = _path_template_or_none(updates["extrafanart_template"])
             if "nfo_template" in updates:
                 lib.nfo_template = _path_template_or_none(updates["nfo_template"])
+            if "tvshow_nfo_template" in updates:
+                lib.tvshow_nfo_template = _path_template_or_none(updates["tvshow_nfo_template"])
+            if "episode_nfo_template" in updates:
+                lib.episode_nfo_template = _path_template_or_none(updates["episode_nfo_template"])
             if "trailer_template" in updates:
                 lib.trailer_template = _path_template_or_none(updates["trailer_template"])
             if "subtitle_template" in updates:

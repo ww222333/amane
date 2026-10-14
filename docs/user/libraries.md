@@ -6,6 +6,8 @@
 
 「媒体库 → 添加」
 
+创建时可设置 **刮削路由**: 不指定则按文件名与番号推断内容类型并走对应站点链; 指定某一类型 (如漫剧) 后, 该库刮削固定走该类型路由, 不再推断.
+
 ## 文件监控
 
 每个库选择如何发现新文件. 自动化级别仍决定发现之后是否入库、是否刮削; 整理始终手动触发.
@@ -82,9 +84,11 @@ Authorization = "Bearer <Amane API Token>"
 | `{year}` | 发行年份 | `2024` |
 | `{release}` | 发行日期 | `2024-01-15` |
 | `{ext}` | 正在放置的文件扩展名 | `mp4` / `srt` |
-| `{cd?}` | CD/分集编号 | `1` / `2` / 空 |
+| `{cd?}` | 多碟 / 分盘编号 | `1` / `2` / 空 |
+| `{season?}` | 季号 (两位补零) | `01` / 空 |
+| `{episode?}` | 集号 (两位补零) | `01` / `31` / 空 |
 | `{sub?}` | 中字标记 | `C` / 空 |
-| `{content_type}` | 内容类型 | `censored` / `uncensored` / `chinese` / `western` / `fc2` / `amateur` / `hentai` / `unknown` |
+| `{content_type}` | 内容类型 | `censored` / `uncensored` / `chinese` / `western` / `fc2` / `amateur` / `hentai` / `manju` / `unknown` |
 | `{mosaic?}` | 马赛克标记 | `censored` / `uncensored` / `cracked` / `leaked` / 空 |
 | `{def?}` | 分辨率 | `4K` / `1080p` / `HD` / 空 |
 | `{raw_name}` | 源视频文件名 | `A/B.mp4` → `B` |
@@ -117,13 +121,17 @@ Authorization = "Bearer <Amane API Token>"
 ### 默认模板
 
 ```
-视频: {studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}
+视频: {studio}/{number}/{number}[.S{season?}E{episode?}][-CD{cd?}][-{sub?}].{ext}
 封面: {link_dir}/thumb.jpg
 海报: {link_dir}/poster.jpg
-NFO: {link_dir}/{video_name}.nfo
+NFO (影片): {link_dir}/{video_name}.nfo
+剧集主 NFO: {video_dir}/tvshow.nfo
+分集 NFO: {link_dir}/{video_name}.nfo
 预告片: {link_dir}/trailer.mp4
 字幕: {link_dir}/{raw_srt_name}.{ext}
 ```
+
+漫剧整理时 `write_nfo` 写出剧级 `<tvshow>` 与分集 `<episodedetails>`, 不写影片 `<movie>`. 库上 `tvshow_nfo_template` / `episode_nfo_template` 为空时采用上表默认; 影片仍只用 `nfo_template`.
 
 ### 可选组语法
 
@@ -213,21 +221,25 @@ https://example.com/{video_relpath} -> https://example.com/ABC-123/ABC-123.mp4
 !!! note
     目前整理操作无自动触发途径, 需要手动执行.
 
-## 分集 (CD) 识别
+## 多碟与剧集尾标
 
-Amane 支持自动识别分集文件名, 目前支持以下几种常见标记:
+多碟 / 分盘写入 `{cd?}`:
 
-- `-CD1`, `-CD2` — 标准分集标记
-- `-Part1`, `-Part2` — 替代分集标记
-- `S01E31`, `EP03`, `E5`, `第12集` — 剧集尾标 (只取集号写入 `{cd?}`; 季号不进入编号; 「全 N 集」只影响漫剧归类, 不填分集号)
-- `-A`, `-B` — 字母分集 (`-C` 与中字冲突, 不支持)
-- `-1` 到 `-9` — 尾部数字分集
+- `-CD1`, `-CD2` — 标准多碟标记
+- `-Part1`, `-Part2` — 替代标记
+- `-A`, `-B` — 字母分盘 (`-C` 与中字冲突, 不支持)
+- `-1` 到 `-9` — 尾部数字分盘
 
-检测到的分集编号通过 `{cd?}` 占位符填入, 在模板中用可选组控制是否出现. 模板里的字面量 (`-CD` / `-EP` 等) 可自行改写, 与识别标记无关. 例如默认模板 `{studio}/{number}/{number}[-CD{cd?}].{ext}`:
+剧集尾标写入 `{season?}` / `{episode?}` (路径侧两位补零; 「全 N 集」只影响漫剧归类, 不填季集):
 
-- 源文件 `MIDV-123-CD2.mp4` → `Studio Name/MIDV-123/MIDV-123-CD2.mp4`
-- 源文件 `MIDV-123.mp4` (无分集) → `Studio Name/MIDV-123/MIDV-123.mp4`
-- 源文件 `高三爱情故事.S01E31.mp4` → 番号 `高三爱情故事`, 分集 `31` → `…/高三爱情故事/高三爱情故事-CD31.mp4` (若模板改为 `[-EP{cd?}]` 则写出 `-EP31`)
+- `S01E31` — 季与集
+- `EP03`, `E5`, `第12集` — 只有集号时季号按 `1`
+
+默认视频模板同时带两组可选段: `[.S{season?}E{episode?}]` 与 `[-CD{cd?}]`. 字面量可自行改写.
+
+- 源文件 `MIDV-123-CD2.mp4` → `…/MIDV-123/MIDV-123-CD2.mp4`
+- 源文件 `MIDV-123.mp4` (无标记) → `…/MIDV-123/MIDV-123.mp4`
+- 源文件 `高三爱情故事.S01E31.mp4` → 番号 `高三爱情故事` → `…/高三爱情故事/高三爱情故事.S01E31.mp4`
 
 ## 字幕文件
 

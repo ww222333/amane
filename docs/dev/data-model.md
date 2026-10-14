@@ -11,7 +11,8 @@
 | 实体 | 角色 | 唯一键 |
 |------|------|--------|
 | `MediaFile` | 磁盘上视频文件的索引 | `path` UNIQUE (**NFC**; 目录列出的 NFD 与 NFC 是同一路径) |
-| `Metadata` | 番号级聚合元数据 | `number` UNIQUE (**大小写不敏感**; 存库保留首次写入的原始大小写) |
+| `Metadata` | 番号级聚合元数据 (漫剧 = 一部剧一条) | `number` UNIQUE (**大小写不敏感**; 存库保留首次写入的原始大小写) |
+| `Episode` | 剧集分集行, 挂在 `Metadata` 下; `title` / `plot` 可空 | `(metadata_id, season, episode)` UNIQUE |
 | `Resource` | URL 级下载缓存 | `url` UNIQUE |
 | `Task` | 持久化任务队列 | `id` |
 | `Library` | 媒体库: 根目录 + 路径模板 + 整理方式 + 自动化级别 | `id` |
@@ -25,7 +26,9 @@
 
 `MediaFile` 与 `Metadata` 解耦: **Metadata 是一等公民** (用户直接管理的番号级条目), 有效性不依赖本地文件; `MediaFile` 是磁盘视频的索引, 能对应到某条 Metadata 时以多对一绑定 `metadata_id`. `metadata_id IS NULL` 的文件 (解析失败 / 尚未刮削) 与**没有任何 MediaFile 的 Metadata** (by-number 刮削、只囤元数据) 都是常态, 不是待清理的对象.
 
-文件相位 (`content_type` / `mosaic` / `definition`) 是 **path 的投影**, 连同中字的文件名标记列落在 `MediaFile`: 创建与修改 path 时用同一次 `parse_file_info` 回填, 不纳入对外 PATCH; `cd` 只用于 ORGANIZE 分集配对, 不落库. `content_type` 是番号 / 目录的内容类型 (决定刮削路由), `mosaic` 是这份文件的马赛克标记 (有码 / 无码 / 破解 / 流出); 词表未命中时按内容类型兜底 (有码 → `censored`, 无码 → `uncensored`, 国产 / FC2 / 欧美保持空), 已有的破解 / 流出 / 无码标记不覆盖. 无码展示与筛选是 `mosaic=uncensored OR content_type=uncensored`. `ContentType.chinese` 是国产, 不是中字. 中字是两个来源的并集: 文件名的中字标记 (`has_subtitle_in_name`, path 的投影) 与视频同目录存在库 `subtitle_extensions` 命中的字幕 (`has_external_subtitle`, 只在登记与修改 path 时各检查一次). 两者都不校验语言文字, 与 ORGANIZE 的字幕配对口径相同; 目录读取不到时按无字幕处理. 只删除字幕不会触发复查, 视频重新登记或更换 path 时才回退. 并集在 Python 是 `MediaFile.has_subtitle` (property), SQL 侧必须改用 `db/models.py::has_subtitle_predicate`, 两处口径必须一致.
+漫剧 / 剧集: 列表仍以 `Metadata` 展示一部剧; 分集落在 `Episode` (`season` 默认 1, `episode` 对应文件名集号 / `{episode?}`). 站点可只回 `episode_count` (补齐 1..N 空标题行) 或带 `episodes[]` (非空 `title`/`plot` 填空不覆盖). 刮削完成时若文件名解析出集号, `MediaFile.episode_id` 按 `(season, episode)` 绑定对应分集行. `Metadata.episode_count` 为站点声明或分集行上界. 无单集标题时 UI 显示「第 N 集」. 详情「分集来源对比」可选用 `raw` 中某一来源整表覆盖写入 (`POST /metadata/{id}/episodes/apply`); 不删除未出现在该源的已有集行.
+
+文件相位 (`content_type` / `mosaic` / `definition`) 是 **path 的投影**, 连同中字的文件名标记列落在 `MediaFile`: 创建与修改 path 时用同一次 `parse_file_info` 回填, 不纳入对外 PATCH. `cd` / `season` / `episode` 不落库: ORGANIZE 用 `cd` 填 `{cd?}` 并做多碟字幕配对, 用 `season` / `episode` 填 `{season?}` / `{episode?}`、写分集 NFO, 并在刮削收尾时绑定 `episode_id`. `content_type` 是番号 / 目录的内容类型 (决定刮削路由), `mosaic` 是这份文件的马赛克标记 (有码 / 无码 / 破解 / 流出); 词表未命中时按内容类型兜底 (有码 → `censored`, 无码 → `uncensored`, 国产 / FC2 / 欧美保持空), 已有的破解 / 流出 / 无码标记不覆盖. 无码展示与筛选是 `mosaic=uncensored OR content_type=uncensored`. `ContentType.chinese` 是国产, 不是中字. 中字是两个来源的并集: 文件名的中字标记 (`has_subtitle_in_name`, path 的投影) 与视频同目录存在库 `subtitle_extensions` 命中的字幕 (`has_external_subtitle`, 只在登记与修改 path 时各检查一次). 两者都不校验语言文字, 与 ORGANIZE 的字幕配对口径相同; 目录读取不到时按无字幕处理. 只删除字幕不会触发复查, 视频重新登记或更换 path 时才回退. 并集在 Python 是 `MediaFile.has_subtitle` (property), SQL 侧必须改用 `db/models.py::has_subtitle_predicate`, 两处口径必须一致.
 
 Metadata 列表的角标与筛选经由关联 EXISTS / 页级聚合 (`file_phase`): 任一挂载文件具备即亮, `definition` 取最高档; 没有挂载文件的 Metadata 不命中这些筛选. 模板占位符 `{mosaic?}` 输出判定后的 mosaic, `{content_type}` 输出内容类型.
 
@@ -100,7 +103,7 @@ PATCH 三态: **省略键** = 不更新 (`exclude_unset`); **显式值** = 写�
 
 ## Library 整理布局
 
-每个 Library 持有 `move_mode` (move / copy / hardlink / symlink)、一组按资源类型独立的路径模板与整理默认 (`write_nfo` / `copy_resources`), 因此同一进程里各库可以不同. `copy_resources` 与刮削热配置 `scraping.download_resources` 共用 `DownloadableResource` 枚举但互不读写 — 前者控制复制到库路径, 后者控制写入 Resource 目录. ORGANIZE payload 上对应字段为 `None` 时沿用库设置, 非空则只覆盖该次任务.
+每个 Library 持有 `move_mode` (move / copy / hardlink / symlink)、一组按资源类型独立的路径模板与整理默认 (`write_nfo` / `copy_resources`), 因此同一进程里各库可以不同. `copy_resources` 与刮削热配置 `scraping.download_resources` 共用 `DownloadableResource` 枚举但互不读写 — 前者控制复制到库路径, 后者控制写入 Resource 目录. ORGANIZE payload 上对应字段为 `None` 时沿用库设置, 非空则只覆盖该次任务. `Library.content_type` 为空时刮削仍按文件名 / 番号推断 (含自定义前缀覆盖); 非空则该库入队的 SCRAPE 固定走此类型路由并锁定, 不再推断或前缀覆盖. 漫剧 (`ContentType.manju`) 的 NFO 路径由 `tvshow_nfo_template` / `episode_nfo_template` 解析, 内容为 `<tvshow>` / `<episodedetails>`; 影片仍用 `nfo_template` 写 `<movie>`. 空模板回退到 `organize/path_templates.py` 中的对应默认.
 
 `trailer_pattern` 只在库上: 对**文件名 (含扩展名)** 做正则搜索, 命中则 REFRESH 扫描与 watcher 都不把该文件当正片入库; 空串关闭. `min_file_size` (字节, 默认 0 关闭) 只过滤**扫描视频**: 后缀须属于该次扫描的视频扩展名白名单; 图片 / NFO / 字幕不适用, `.strm` 是路径指针也不参与判定; 符号链接跟随目标比较真实大小, 否则已整理的入口会被当作广告. 低于阈值与文件黑名单同语义: REFRESH / watcher 不入库, 整库扫描列为清理候选; stat 失败 (含悬空链接) 视为不匹配.
 
@@ -112,7 +115,7 @@ PATCH 三态: **省略键** = 不更新 (`exclude_unset`); **显式值** = 写�
 - `.amane_trash` 是历史遗留目录: 不再写入新内容, 目录本身与任意深度下级路径在任何扫描 / 监控中都恒被忽略, 历史内容由清理面板处置; 手动移出则被当作新文件重新入库.
 - 跳过正则在扫描 / 监控侧**逐条编译、任一命中即跳过**; 不允许用 `|` 拼接 (用户全局旗标拼在联合式中间会触发 re 的 "global flags not at the start"). 空列表关闭.
 
-分集 (CD) 检测只做在 ORGANIZE 时, 不落库, 写回靠路径模板里的 `{cd?}`. 文件名无分集时, 直接父目录整段为 `CDn` / `PARTn` 也可认. 剧集尾标 (`SxxExx` / `EP` / `第 N 集`) 同样填入 `cd` (只取集号); 漫剧刮削仍用剥尾后的剧名作为 `number`. **幂等**: 写出的分集 / 中字 / 马赛克 / 分辨率格式须能被同一检测逻辑反推, 否则二次整理会丢失标记 — 当前只文档约束, 不加验证.
+多碟与剧集尾标只在解析 / ORGANIZE 时计算, 不落库. 多碟 (`CD` / `PART` / `A-B` / 尾部数字, 以及父目录整段 `CDn` / `PARTn`) 写入 `cd` → `{cd?}`. 剧集尾标 (`SxxExx` / `EP` / `第 N 集`) 写入 `season` / `episode` → `{season?}` / `{episode?}` (无季号时 season=1); 漫剧刮削仍用剥尾后的剧名作为 `number`. **幂等**: 写出的季集 / 多碟 / 中字 / 马赛克 / 分辨率格式须能被同一检测逻辑反推, 否则二次整理会丢失标记 — 当前只文档约束, 不加验证.
 
 字幕: ORGANIZE 在视频**挪走前**扫描其同目录 (不递归、不入库、不扫描同目录其它视频), 扩展名由库 `subtitle_extensions` 配置; 多个字幕全部搬走不挑主字幕, 放置采用与视频相同的 `move_mode`. 字幕采用同一套 `parse_file_info`, 但只解析**文件名** (`text=` 入参), 否则 `chs.srt` 会被当成番号; 解析出番号时必须与当前视频相同, 再按分集配对, 解析不出时才回退独立目录规则. 中字角标只用同一份 `subtitle_extensions` 做同目录存在性检查 (`library/rules.py::has_companion_subtitle`), 不做这里的配对, 也不改变本段行为.
 

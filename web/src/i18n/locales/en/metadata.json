@@ -86,6 +86,11 @@
     "connections": "Related Files",
     "noFiles": "No related files",
     "openInLibrary": "Open in library",
+    "episodes": "Episodes",
+    "episodeCount": "{{count}} episodes",
+    "episodeUntitled": "Episode {{n}}",
+    "episodeHasFile": "Has file",
+    "episodeNoFile": "No file",
     "userTags": "User tags",
     "noUserTags": "No user tags yet",
     "selectUserTag": "Select or type a user tag…",
@@ -381,6 +386,19 @@
     "changedCount_one": "{{count}} field(s) changed",
     "changedCount_other": "{{count}} field(s) changed",
     "loadImages": "Load images"
+  },
+  "episodeCompare": {
+    "title": "Compare episodes",
+    "empty": "No episode raw data to compare",
+    "hint": "Compare each site raw vs merged DB rows; pick a source to overwrite episode fields (existing rows are kept)",
+    "merged": "Merged",
+    "episodeCol": "Ep",
+    "noTitle": "No episode title",
+    "countOnly": "Count only",
+    "pickSource": "Episode data source",
+    "selected": "Selected",
+    "apply": "Apply selected source",
+    "applied": "Episodes updated from selected source"
   },
   "lock": {
     "manage": "Field Locks",

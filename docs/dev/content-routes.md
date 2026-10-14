@@ -24,7 +24,7 @@
 | amateur | MGS 第一; FANZA 有素人频道; javbus 首页能见到 `300MIUM-*` | MGS 不纳入有碼默认, 否则 MIDV 会请求 MGS |
 | western | TPDB 第一 (需 token 才真正请求); 有歐美分类的索引排在链尾 | javbus 欧美域 (目录空); 不实现该域爬虫 |
 | hentai | getchu 对路径关键词分类的里番第一; DMM 动画 / 同人; javdb 兜底 | getchu 商品是数字 id 不是 JAV 番号, 仅因路径分类而纳入此链 |
-| manju | 带季 / 集尾标的剧名 (如 `高三爱情故事.S01E31` → 番号 `高三爱情故事`, 分集号 `31` 供整理 `{cd?}`); 目录段首「漫剧」可覆盖类型; 默认 `mdcx.huangguoai` → `mdcx.javday` | — |
+| manju | 带季 / 集尾标的剧名 (如 `高三爱情故事.S01E31` → 番号 `高三爱情故事`, 季集供 `{season?}` / `{episode?}` 与绑定 `Episode`); 目录段首「漫剧」可覆盖类型; 插件宜回 `episode_count` / `episodes[]` (无单集标题可空); 默认 `mdcx.huangguoai` → `mdcx.huangguodrama` → `mdcx.javday` | — |
 | unknown | 解析未识别的番号 / 文件名; 默认空站点链, 由用户自行配置 | — |
 
 ## 综合索引

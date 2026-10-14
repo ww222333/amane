@@ -13,7 +13,7 @@ from ..db.models import Library, TaskType
 from ..enums import LibraryAutomation, LibraryIngest
 from ..events import EventBus, EventType
 from ..handlers._common import refresh_external_subtitle, register_media_file, scan_library
-from ..handlers.models import ScrapePayload
+from ..handlers.models import ScrapePayload, resolve_library_scrape_content_type
 from ..library import LibraryFileKind, LibraryScan, fail_dir_for_scan
 from ..parsing import parse_file_info
 from ..utils.path import is_descendant, path_is_under
@@ -488,10 +488,14 @@ class WatcherService:
         if parsed is not None and parsed.number is not None:
             await self._repo.update_media_file(media.id, number=parsed.number)
             if library is not None and library.automation == LibraryAutomation.SCRAPE:
+                content_type, locked = resolve_library_scrape_content_type(library, inferred=parsed.content_type)
                 task = await self._repo.create_task(
                     task_type=TaskType.SCRAPE,
                     payload=ScrapePayload(
-                        media_file_id=media.id, number=parsed.number, content_type=parsed.content_type
+                        media_file_id=media.id,
+                        number=parsed.number,
+                        content_type=content_type,
+                        lock_content_type=locked,
                     ),
                 )
                 logger.info("scrape task submitted", task_id=task.id, number=parsed.number, path=path_str)

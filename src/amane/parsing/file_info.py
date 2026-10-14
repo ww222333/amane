@@ -4,8 +4,8 @@
 只有字符串则按自由文本 (RSS 标题、已有番号), 未命中则 ``number is None``, 不能把原文冒充番号.
 常用字段投影是同一函数的包装.
 
-文件相位 (cd / 中字 / 马赛克 / 分辨率) 与类型正交: cd / 中字 / 分辨率只依据文件名; 马赛克依据文件名与目录整段词表, 未命中时再依据番号分类 (有码类型为 censored, 无码类型为 uncensored; 其它类型为空).
-``cd`` 兼认多碟标记 (CD / PART / A-B) 与剧集尾标 (SxxExx / EP / 第 N 集); 季号不写入 ``cd``, 只取集号. 「全 N 集」只用于漫剧归类, 不填 ``cd``.
+文件相位 (cd / season / episode / 中字 / 马赛克 / 分辨率) 与类型正交: 相位只依据文件名 (马赛克还可依据目录整段词表, 未命中时再依据番号分类: 有码 → censored, 无码 → uncensored; 其它为空).
+``cd`` 只认多碟标记 (CD / PART / A-B / 尾部数字). 剧集尾标 (SxxExx / EP / 第 N 集) 写入 ``season`` / ``episode``; 无季号时 ``season=1``. 「全 N 集」只用于漫剧归类, 不填季集.
 """
 
 from __future__ import annotations
@@ -49,6 +49,8 @@ class FileInfo:
     content_type: ContentType
     prefix: str
     cd: int | None = None
+    season: int | None = None
+    episode: int | None = None
     has_subtitle: bool = False
     mosaic: Mosaic | None = None
     definition: str | None = None
@@ -249,6 +251,7 @@ def parse_file_info(
         cd = _detect_cd(basename)
         if cd is None and dirs:
             cd = _detect_cd_from_parent(dirs[-1])
+        season, episode = _detect_season_episode(basename)
         mosaic = _detect_mosaic(basename) or _detect_mosaic_from_dirs(dirs)
     else:
         # 文本: 只执行番号规则; 未命中则 number 为 None, 相位只依据该字符串.
@@ -257,12 +260,15 @@ def parse_file_info(
         number, content_type = _identify(text, dirs, escape, fallback=False)
         basename = Path(text).stem.upper()
         cd = _detect_cd(basename)
+        season, episode = _detect_season_episode(basename)
         mosaic = _detect_mosaic(basename)
     return FileInfo(
         number=number,
         content_type=content_type,
         prefix=_prefix(number) if number else "",
         cd=cd,
+        season=season,
+        episode=episode,
         has_subtitle=_detect_subtitle(basename),
         mosaic=_fill_mosaic(mosaic, content_type),
         definition=_detect_definition(basename),
@@ -440,13 +446,16 @@ def _remove_escape_strings(filename: str, escape_strings: list[str]) -> str:
 
 
 # 季 / 集尾标: 命中则视为漫剧番号, 刮削用剥尾后的剧名.
+# 尾标后可再跟多碟标记 (S01E31-CD2), 一并剥掉.
 _EPISODE_TAIL_RE = re.compile(
     r"(?i)[\s._\-]*(?:"
     r"s\d{1,2}\s*e\s*\d{1,4}"
     r"|e(?:p(?:isode)?)?\s*\d{1,4}"
     r"|第\s*\d{1,4}\s*[集话話期]"
     r"|全\s*\d{1,4}\s*集"
-    r")$"
+    r")"
+    r"(?:[\s._\-]*(?:CD|PART)\d{1,2}|-[AB1-9])?"
+    r"$"
 )
 
 
@@ -667,23 +676,27 @@ def _classify_from_path(stem: str, dir_names: tuple[str, ...]) -> ContentType | 
 
 
 def _detect_cd(basename: str) -> int | None:
-    """多碟与剧集尾标 → 分集编号; 同文件多标记时先多碟后剧集."""
+    """多碟标记 → 分盘编号. 不含剧集尾标."""
     if m := re.search(r"[-_.]CD(\d{1,2})", basename, flags=re.IGNORECASE):
         return int(m[1])
     if m := re.search(r"[-_.]PART(\d{1,2})", basename, flags=re.IGNORECASE):
-        return int(m[1])
-    # S01E31 / S1E2 → 只取集号 (31 / 2), 季号不进入 cd.
-    if m := re.search(r"(?i)(?:^|[\s._-])S\d{1,2}\s*E\s*(\d{1,4})(?:$|[\s._-])", basename):
-        return int(m[1])
-    if m := re.search(r"(?i)(?:^|[\s._-])E(?:P(?:ISODE)?)?\s*(\d{1,4})(?:$|[\s._-])", basename):
-        return int(m[1])
-    if m := re.search(r"第\s*(\d{1,4})\s*[集话話期](?:$|[\s._-])", basename):
         return int(m[1])
     if m := re.search(r"-([AB])(?:\.|$)", basename):
         return ord(m[1]) - ord("A") + 1
     if m := re.search(r"-([1-9])$", basename):
         return int(m[1])
     return None
+
+
+def _detect_season_episode(basename: str) -> tuple[int | None, int | None]:
+    """剧集尾标 → (season, episode). 无季号时 season=1; 「全 N 集」不命中."""
+    if m := re.search(r"(?i)(?:^|[\s._-])S(\d{1,2})\s*E\s*(\d{1,4})(?:$|[\s._-])", basename):
+        return int(m[1]), int(m[2])
+    if m := re.search(r"(?i)(?:^|[\s._-])E(?:P(?:ISODE)?)?\s*(\d{1,4})(?:$|[\s._-])", basename):
+        return 1, int(m[1])
+    if m := re.search(r"第\s*(\d{1,4})\s*[集话話期](?:$|[\s._-])", basename):
+        return 1, int(m[1])
+    return None, None
 
 
 def _detect_cd_from_parent(parent: str) -> int | None:

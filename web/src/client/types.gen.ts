@@ -528,6 +528,20 @@ export type AgentTraceResponse = {
 export type ApiType = 'chat' | 'response' | 'anthropic';
 
 /**
+ * ApplyEpisodesRequest
+ *
+ * 选用 ``Metadata.raw`` 中某一来源的分集覆盖写入 ``Episode`` 表.
+ */
+export type ApplyEpisodesRequest = {
+    /**
+     * Source
+     *
+     * raw 中的来源键, 如 mdcx.huangguoai
+     */
+    source: string;
+};
+
+/**
  * ApprovalsRow
  *
  * 未决审批快照. 每个回合结束发一条, **空列表表示已无未决**, 后者覆盖前者.
@@ -1005,6 +1019,48 @@ export type DesktopResponse = {
  * 影片附属资源类型: 刮削写入 Resource, 整理时按库配置复制到库路径.
  */
 export type DownloadableResource = 'thumb' | 'poster' | 'extrafanart' | 'trailer';
+
+/**
+ * EpisodeResponse
+ */
+export type EpisodeResponse = {
+    /**
+     * Id
+     */
+    id: number;
+    /**
+     * Metadata Id
+     */
+    metadata_id: number;
+    /**
+     * Season
+     */
+    season: number;
+    /**
+     * Episode
+     */
+    episode: number;
+    /**
+     * Title
+     */
+    title?: string | null;
+    /**
+     * Plot
+     */
+    plot?: string | null;
+    /**
+     * Media File Ids
+     */
+    media_file_ids?: Array<number>;
+    /**
+     * Created At
+     */
+    created_at?: string | null;
+    /**
+     * Updated At
+     */
+    updated_at?: string | null;
+};
 
 /**
  * ErrorRow
@@ -1953,6 +2009,14 @@ export type LibraryCreateRequest = {
      */
     nfo_template?: string | null;
     /**
+     * Tvshow Nfo Template
+     */
+    tvshow_nfo_template?: string | null;
+    /**
+     * Episode Nfo Template
+     */
+    episode_nfo_template?: string | null;
+    /**
      * Trailer Template
      */
     trailer_template?: string | null;
@@ -2092,6 +2156,14 @@ export type LibraryResponse = {
      */
     nfo_template?: string | null;
     /**
+     * Tvshow Nfo Template
+     */
+    tvshow_nfo_template?: string | null;
+    /**
+     * Episode Nfo Template
+     */
+    episode_nfo_template?: string | null;
+    /**
      * Trailer Template
      */
     trailer_template?: string | null;
@@ -2205,6 +2277,14 @@ export type LibraryUpdateRequest = {
      * Nfo Template
      */
     nfo_template?: string | null;
+    /**
+     * Tvshow Nfo Template
+     */
+    tvshow_nfo_template?: string | null;
+    /**
+     * Episode Nfo Template
+     */
+    episode_nfo_template?: string | null;
     /**
      * Trailer Template
      */
@@ -2332,6 +2412,10 @@ export type MediaFileResponse = {
      * Metadata Id
      */
     metadata_id?: number | null;
+    /**
+     * Episode Id
+     */
+    episode_id?: number | null;
     /**
      * Created At
      */
@@ -2484,6 +2568,10 @@ export type MetadataDetailResponse = {
      * Files
      */
     files: Array<MediaFileResponse>;
+    /**
+     * Episodes
+     */
+    episodes?: Array<EpisodeResponse>;
     /**
      * User Tags
      */
@@ -2643,6 +2731,10 @@ export type MetadataPartial = {
     source_urls?: {
         [key: string]: string;
     } | null;
+    /**
+     * Episode Count
+     */
+    episode_count?: number | null;
 };
 
 /**
@@ -2770,6 +2862,10 @@ export type MetadataResponse = {
      */
     locked_fields?: Array<MetadataField>;
     /**
+     * Episode Count
+     */
+    episode_count?: number | null;
+    /**
      * File Count
      */
     file_count?: number;
@@ -2896,6 +2992,14 @@ export type OptionalPathTemplateDefaults = {
      * Nfo Template
      */
     nfo_template: string;
+    /**
+     * Tvshow Nfo Template
+     */
+    tvshow_nfo_template: string;
+    /**
+     * Episode Nfo Template
+     */
+    episode_nfo_template: string;
     /**
      * Trailer Template
      */
@@ -5922,6 +6026,36 @@ export type MergeMetadataResponses = {
 };
 
 export type MergeMetadataResponse = MergeMetadataResponses[keyof MergeMetadataResponses];
+
+export type ApplyEpisodesFromSourceData = {
+    body: ApplyEpisodesRequest;
+    path: {
+        /**
+         * Metadata Id
+         */
+        metadata_id: number;
+    };
+    query?: never;
+    url: '/api/metadata/{metadata_id}/episodes/apply';
+};
+
+export type ApplyEpisodesFromSourceErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type ApplyEpisodesFromSourceError = ApplyEpisodesFromSourceErrors[keyof ApplyEpisodesFromSourceErrors];
+
+export type ApplyEpisodesFromSourceResponses = {
+    /**
+     * Successful Response
+     */
+    200: MetadataDetailResponse;
+};
+
+export type ApplyEpisodesFromSourceResponse = ApplyEpisodesFromSourceResponses[keyof ApplyEpisodesFromSourceResponses];
 
 export type CheckConnectivityData = {
     /**

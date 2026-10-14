@@ -2,6 +2,7 @@
 
 from .agent import AgentRepoMixin
 from .base import RepositoryMixinBase
+from .episodes import EpisodesRepoMixin
 from .facets import FacetsRepoMixin
 from .feeds import FeedsRepoMixin
 from .libraries import LibrariesRepoMixin
@@ -12,6 +13,7 @@ from .tasks import TasksRepoMixin
 
 __all__ = [
     "AgentRepoMixin",
+    "EpisodesRepoMixin",
     "FacetsRepoMixin",
     "FeedsRepoMixin",
     "LibrariesRepoMixin",

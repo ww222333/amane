@@ -18,7 +18,7 @@ from typing import Any, Protocol
 from structlog.contextvars import bind_contextvars
 
 from ..config.manager import LANG_METADATA_FIELD_SET
-from ..crawlers.models import FetchOptions, FilmActor, MediaMetadata, SearchQuery
+from ..crawlers.models import EpisodeInfo, FetchOptions, FilmActor, MediaMetadata, SearchQuery
 from ..crawlers.site_roles import MULTI_LANGUAGE_SOURCE_IDS
 from ..enums import ActorGender, Language, MetadataField, SiteName
 from ..observability import current, invoke_source
@@ -456,6 +456,40 @@ def _assemble_aggregate_fields(graph: FetchGraph, state: ExecutionState) -> None
             state.result.external_ids[ck] = data.external_id
         if data.source_url and ck not in state.result.source_urls:
             state.result.source_urls[ck] = data.source_url
+
+    # 分集不进字段优先级链: 各站并集, 同 (season, episode) 非空标题 / 简介填空.
+    episode_lists: list[list[EpisodeInfo]] = []
+    counts: list[int] = []
+    for node in graph.nodes:
+        data = state.fetched.get(node.cache_key)
+        if data is None:
+            continue
+        if data.episodes:
+            episode_lists.append(list(data.episodes))
+        if data.episode_count is not None:
+            counts.append(data.episode_count)
+    state.result.episodes = _merge_episodes(episode_lists)
+    if counts:
+        state.result.episode_count = max(counts)
+    elif state.result.episodes:
+        state.result.episode_count = max(ep.episode for ep in state.result.episodes)
+
+
+def _merge_episodes(lists: list[list[EpisodeInfo]]) -> list[EpisodeInfo]:
+    """按 (season, episode) 去重合并; 后到的非空 title/plot 填补空位, 不覆盖已有非空."""
+    by_key: dict[tuple[int, int], EpisodeInfo] = {}
+    for eps in lists:
+        for ep in eps:
+            key = (ep.season, ep.episode)
+            cur = by_key.get(key)
+            if cur is None:
+                by_key[key] = ep.model_copy()
+                continue
+            if not (cur.title or "").strip() and (ep.title or "").strip():
+                cur.title = ep.title
+            if not (cur.plot or "").strip() and (ep.plot or "").strip():
+                cur.plot = ep.plot
+    return sorted(by_key.values(), key=lambda e: (e.season, e.episode))
 
 
 def _normalize_source_text(meta: MediaMetadata) -> MediaMetadata:

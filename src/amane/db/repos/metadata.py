@@ -328,6 +328,8 @@ class MetadataRepoMixin(RepositoryMixinBase):
                 metadata.field_sources = updates["field_sources"]
             if "raw" in updates:
                 metadata.raw = updates["raw"]
+            if "episode_count" in updates:
+                metadata.episode_count = updates["episode_count"]
             metadata.updated_at = _utcnow()
             session.add(metadata)
             await session.flush()

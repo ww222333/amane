@@ -76,12 +76,30 @@ class _RenderCase(NamedTuple):
 
 # 模板 + 源文件 → 整理后相对库根目录的路径. 标记来自 source; metadata 字段来自 _meta, 可由 meta 覆盖.
 RENDER_CASES: tuple[_RenderCase, ...] = (
-    # --- 默认模板: [-CD{cd?}][-{sub?}] 两个并列组 ---
+    # --- 默认模板: [.S{season?}E{episode?}][-CD{cd?}][-{sub?}] ---
     _RenderCase("MIDV-123.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123.mp4"),
     _RenderCase("MIDV-123-CD1.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123-CD1.mp4"),
     _RenderCase("MIDV-123-C.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123-C.mp4"),
     _RenderCase("MIDV-123-CD1-C.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123-CD1-C.mp4"),
     _RenderCase("MIDV-123-UC.mp4", VIDEO_TEMPLATE_DEFAULT, "StudioX/ABC-123/ABC-123-C.mp4"),
+    _RenderCase(
+        "高三爱情故事.S01E31.mp4",
+        VIDEO_TEMPLATE_DEFAULT,
+        "StudioX/高三爱情故事/高三爱情故事.S01E31.mp4",
+        meta={"number": "高三爱情故事", "studio": "StudioX"},
+    ),
+    _RenderCase(
+        "某剧.EP03.mp4",
+        VIDEO_TEMPLATE_DEFAULT,
+        "StudioX/某剧/某剧.S01E03.mp4",
+        meta={"number": "某剧", "studio": "StudioX"},
+    ),
+    _RenderCase(
+        "某剧.S02E05-CD2.mp4",
+        VIDEO_TEMPLATE_DEFAULT,
+        "StudioX/某剧/某剧.S02E05-CD2.mp4",
+        meta={"number": "某剧", "studio": "StudioX"},
+    ),
     # --- 单占位符可选组: 空则连字面量一起省略 ---
     _RenderCase("MIDV-123-CD2.mp4", "{number}/{number}[-Part {cd?}].{ext}", "ABC-123/ABC-123-Part 2.mp4"),
     _RenderCase("MIDV-123.mp4", "{number}/{number}[-Part {cd?}].{ext}", "ABC-123/ABC-123.mp4"),
@@ -273,7 +291,7 @@ class TestValidatePathTemplate:
             ("{mosaic?|=U,=V}", "映射键重复"),
             ("{mosaic?|uncensored=U,uncensored=V}", "映射键重复"),
             ("{mosaic?|uncencored=U}", "映射键未知"),
-            ("{content_type|unknown=x}", "映射键未知"),
+            ("{content_type|notatype=x}", "映射键未知"),
             ("{def?|2160p=4K}", "映射键未知"),
             ("{sub?|CH=中字}", "映射键未知"),
             ("{mosaic?|uncensored=U,}", "占位符映射无效"),

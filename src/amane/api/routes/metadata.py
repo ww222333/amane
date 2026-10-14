@@ -16,8 +16,10 @@ from ...utils.dates import normalize_calendar_date
 from ...utils.model import to_resp
 from ..deps import RepoDep, RuntimeDep
 from ..models import (
+    ApplyEpisodesRequest,
     CommentResponse,
     CropPosterRequest,
+    EpisodeResponse,
     FilePhaseSummary,
     MediaFileResponse,
     MergeRequest,
@@ -197,6 +199,7 @@ async def get_metadata(metadata_id: int, repo: RepoDep) -> MetadataDetailRespons
         raise HTTPException(status_code=404, detail="影片不存在")
     # 关联文件 / 用户 tag / 评论 / 分类 id
     files = await repo.get_media_by_metadata_id(metadata_id)
+    episodes = await repo.list_episodes(metadata_id)
     user_tags = await repo.list_metadata_user_tags(metadata_id)
     comments = await repo.list_comments(metadata_id)
     (
@@ -208,6 +211,16 @@ async def get_metadata(metadata_id: int, repo: RepoDep) -> MetadataDetailRespons
         publisher_id,
         series_id,
     ) = await repo.resolve_metadata_facet_ids(metadata)
+    files_by_ep: dict[int, list[int]] = {}
+    for f in files:
+        if f.episode_id is not None and f.id is not None:
+            files_by_ep.setdefault(f.episode_id, []).append(f.id)
+    episode_resps = [
+        to_resp(EpisodeResponse, ep).model_copy(
+            update={"media_file_ids": files_by_ep.get(ep.id or -1, [])}
+        )
+        for ep in episodes
+    ]
     return MetadataDetailResponse(
         metadata=to_resp(MetadataResponse, metadata).model_copy(
             update={
@@ -216,6 +229,7 @@ async def get_metadata(metadata_id: int, repo: RepoDep) -> MetadataDetailRespons
             }
         ),
         files=[to_resp(MediaFileResponse, f) for f in files],
+        episodes=episode_resps,
         user_tags=[to_resp(UserTagResponse, t) for t in user_tags],
         comments=[to_resp(CommentResponse, c) for c in comments],
         actor_ids=actor_ids,
@@ -332,3 +346,20 @@ async def merge_metadata(metadata_id: int, req: MergeRequest, repo: RepoDep) -> 
     assert updated is not None
     logger.info("metadata merged", metadata_id=metadata_id, selections=req.selections)
     return to_resp(MetadataResponse, updated)
+
+
+@router.post("/{metadata_id}/episodes/apply")
+async def apply_episodes_from_source(
+    metadata_id: int, req: ApplyEpisodesRequest, repo: RepoDep
+) -> MetadataDetailResponse:
+    """选用 raw 中某一来源的分集覆盖写入; 返回与 GET 详情同形 (含 episodes)."""
+    metadata = await repo.get_metadata(metadata_id)
+    if metadata is None:
+        raise HTTPException(status_code=404, detail="影片不存在")
+    try:
+        await repo.apply_episodes_from_raw_source(metadata_id, req.source)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    # 复用 GET 组装, 避免两处字段漂移
+    return await get_metadata(metadata_id, repo)

@@ -22,6 +22,8 @@ from amane.parsing import (
 class _Case(NamedTuple):
     path: str
     cd: int | None = None
+    season: int | None = None
+    episode: int | None = None
     has_subtitle: bool = False
     mosaic: str | None = None
     definition: str | None = None
@@ -184,15 +186,41 @@ CASES: list[object] = [
     _Case("/media/010115_01.mp4", mosaic="uncensored", number="010115_01", content_type=ContentType.UNCENSORED),
     _Case("/media/010115-001/video.mp4", mosaic="uncensored", number="010115-001", content_type=ContentType.UNCENSORED),
     _Case("/media/38-068.mp4", number="38-068", content_type=ContentType.UNKNOWN),
-    # 漫剧: 季集尾标 → 剥尾后的剧名; 集号写入 cd 供整理 {cd?}
-    _Case("/media/高三爱情故事.S01E31.mp4", number="高三爱情故事", content_type=ContentType.MANJU, cd=31),
-    _Case("/media/高三爱情故事.s01e01.mp4", number="高三爱情故事", content_type=ContentType.MANJU, cd=1),
-    _Case("/media/某剧名.第12集.mp4", number="某剧名", content_type=ContentType.MANJU, cd=12),
-    _Case("/media/某剧名.EP03.mp4", number="某剧名", content_type=ContentType.MANJU, cd=3),
-    _Case("/media/某剧名.E5.mp4", number="某剧名", content_type=ContentType.MANJU, cd=5),
+    # 漫剧: 季集尾标 → 剥尾后的剧名; 季集写入 season/episode (不进 cd)
+    _Case(
+        "/media/高三爱情故事.S01E31.mp4",
+        number="高三爱情故事",
+        content_type=ContentType.MANJU,
+        season=1,
+        episode=31,
+    ),
+    _Case(
+        "/media/高三爱情故事.s01e01.mp4",
+        number="高三爱情故事",
+        content_type=ContentType.MANJU,
+        season=1,
+        episode=1,
+    ),
+    _Case("/media/某剧名.第12集.mp4", number="某剧名", content_type=ContentType.MANJU, season=1, episode=12),
+    _Case("/media/某剧名.EP03.mp4", number="某剧名", content_type=ContentType.MANJU, season=1, episode=3),
+    _Case("/media/某剧名.E5.mp4", number="某剧名", content_type=ContentType.MANJU, season=1, episode=5),
     _Case("/media/某剧名.全12集.mp4", number="某剧名", content_type=ContentType.MANJU),
     _Case("/media/漫剧/纯剧名无集数.mp4", number="纯剧名无集数", content_type=ContentType.MANJU),
-    _Case("/media/MIDV-123-EP2.mp4", number="MIDV-123", content_type=ContentType.CENSORED, cd=2),
+    _Case(
+        "/media/MIDV-123-EP2.mp4",
+        number="MIDV-123",
+        content_type=ContentType.CENSORED,
+        season=1,
+        episode=2,
+    ),
+    _Case(
+        "/media/高三爱情故事.S01E31-CD2.mp4",
+        number="高三爱情故事",
+        content_type=ContentType.MANJU,
+        season=1,
+        episode=31,
+        cd=2,
+    ),
     _Case("/media/欧美/T38-068.mp4", number="T38-068", content_type=ContentType.WESTERN),
     _Case("/media/欧美/010115-001.mp4", number="010115-001", content_type=ContentType.WESTERN),
     _Case("/media/SSNI00321.mp4", number="SSNI-321", content_type=ContentType.CENSORED),
@@ -341,6 +369,8 @@ CASES: list[object] = [
 def test_parse_file_info(case: _Case) -> None:
     info = parse_file_info(case.path)
     assert info.cd == case.cd
+    assert info.season == case.season
+    assert info.episode == case.episode
     assert info.has_subtitle is case.has_subtitle
     expected_mosaic = case.mosaic
     if expected_mosaic is None and info.content_type is ContentType.CENSORED:

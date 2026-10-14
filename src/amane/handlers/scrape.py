@@ -62,11 +62,12 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
     async def handle(self, payload: ScrapePayload) -> TaskResult[ScrapeResult]:
         bind_contextvars(number=payload.number)
 
-        # 自定义前缀命中则优先覆盖 content_type (走对应类型路由).
+        # 未锁定时: 自定义前缀命中则覆盖 content_type (走对应类型路由).
         content_type = payload.content_type
-        matched = match_content_type_prefix(payload.number, self._config.scraping.route_prefixes())
-        if matched is not None:
-            content_type = matched
+        if not payload.lock_content_type:
+            matched = match_content_type_prefix(payload.number, self._config.scraping.route_prefixes())
+            if matched is not None:
+                content_type = matched
         progress_total = len(SCALAR_FIELDS) + _PROGRESS_POST_STEPS
         rec = current()
 
@@ -200,7 +201,16 @@ class ScrapeHandler(TaskHandler[ScrapePayload, ScrapeResult]):
             source_urls=result.metadata.source_urls,
             field_sources=result.field_sources,
             raw=result.raw,
+            episode_count=result.metadata.episode_count,
         )
+
+        assert meta.id is not None
+        if result.metadata.episodes or result.metadata.episode_count:
+            await self._repo.sync_episodes(
+                meta.id,
+                result.metadata.episodes,
+                episode_count=result.metadata.episode_count,
+            )
 
         await finalize_media_file(self._repo, payload.media_file_id, meta.id)
 

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from ..crawlers.models import FilmActor
+from ..crawlers.models import EpisodeInfo, FilmActor
 
 
 @dataclass
@@ -37,6 +37,9 @@ class AggregatedMetadata:
     external_ids: dict[str, str] = field(default_factory=dict)
     source_urls: dict[str, str] = field(default_factory=dict)
     field_sources: dict[str, str] = field(default_factory=dict)
+
+    episode_count: int | None = None
+    episodes: list[EpisodeInfo] = field(default_factory=list)
 
 
 @dataclass

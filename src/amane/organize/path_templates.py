@@ -28,15 +28,23 @@ class ResolvedPaths:
     nfo: Path
     trailer: Path
     link: Path | None = None
+    #: 漫剧剧级 NFO; 影片整理可不使用.
+    tvshow_nfo: Path | None = None
+    #: 漫剧单集 NFO; 影片整理可不使用.
+    episode_nfo: Path | None = None
 
 
-VIDEO_TEMPLATE_DEFAULT = "{studio}/{number}/{number}[-CD{cd?}][-{sub?}].{ext}"
+# 剧集尾标走 {season?}/{episode?}; 多碟仍走 {cd?}. 可选组在对应相位为空时整段省略.
+VIDEO_TEMPLATE_DEFAULT = "{studio}/{number}/{number}[.S{season?}E{episode?}][-CD{cd?}][-{sub?}].{ext}"
 THUMB_TEMPLATE_DEFAULT = "{link_dir}/thumb.jpg"
 POSTER_TEMPLATE_DEFAULT = "{link_dir}/poster.jpg"
 FANART_TEMPLATE_DEFAULT = "{link_dir}/fanart.jpg"
 EXTRAFANART_TEMPLATE_DEFAULT = "{link_dir}/extrafanart"
 # 媒体服务器按视频文件名匹配 NFO, 所以默认跟随 {video_name} (含 CD / 中字段).
 NFO_TEMPLATE_DEFAULT = "{link_dir}/{video_name}.nfo"
+# 漫剧: 剧级与分集分路径; 内容分别为 <tvshow> / <episodedetails>.
+TVSHOW_NFO_TEMPLATE_DEFAULT = "{video_dir}/tvshow.nfo"
+EPISODE_NFO_TEMPLATE_DEFAULT = "{link_dir}/{video_name}.nfo"
 TRAILER_TEMPLATE_DEFAULT = "{link_dir}/trailer.mp4"
 SUBTITLE_TEMPLATE_DEFAULT = "{link_dir}/{raw_srt_name}.{ext}"
 
@@ -96,6 +104,12 @@ def resolve_paths(
         ctx, base_path, safe_dirs
     )
     nfo = PathEngine(library.nfo_template or NFO_TEMPLATE_DEFAULT).resolve(ctx, base_path, safe_dirs)
+    tvshow_nfo = PathEngine(library.tvshow_nfo_template or TVSHOW_NFO_TEMPLATE_DEFAULT).resolve(
+        ctx, base_path, safe_dirs
+    )
+    episode_nfo = PathEngine(library.episode_nfo_template or EPISODE_NFO_TEMPLATE_DEFAULT).resolve(
+        ctx, base_path, safe_dirs
+    )
     trailer = PathEngine(library.trailer_template or TRAILER_TEMPLATE_DEFAULT).resolve(ctx, base_path, safe_dirs)
 
     return ResolvedPaths(
@@ -107,6 +121,8 @@ def resolve_paths(
         nfo=nfo,
         trailer=trailer,
         link=link,
+        tvshow_nfo=tvshow_nfo,
+        episode_nfo=episode_nfo,
     )
 
 

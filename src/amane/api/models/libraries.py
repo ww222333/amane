@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ...db import Library
 from ...enums import DownloadableResource, LibraryAutomation, LibraryIngest, LinkMode, MoveMode
+from ...parsing import ContentType
 from ...library import (
     DEFAULT_SUBTITLE_EXTENSIONS,
     DEFAULT_TRAILER_PATTERN,
@@ -15,6 +16,7 @@ from ...library import (
     resolve_ingest_cloud_path,
 )
 from ...organize.path_templates import (
+    EPISODE_NFO_TEMPLATE_DEFAULT,
     EXTRAFANART_TEMPLATE_DEFAULT,
     FANART_TEMPLATE_DEFAULT,
     NFO_TEMPLATE_DEFAULT,
@@ -24,6 +26,7 @@ from ...organize.path_templates import (
     SUBTITLE_TEMPLATE_DEFAULT,
     THUMB_TEMPLATE_DEFAULT,
     TRAILER_TEMPLATE_DEFAULT,
+    TVSHOW_NFO_TEMPLATE_DEFAULT,
     VIDEO_TEMPLATE_DEFAULT,
     PathTemplate,
 )
@@ -40,6 +43,8 @@ class LibraryCreateRequest(BaseModel):
     ingest: LibraryIngest = LibraryIngest.NATIVE
     cloud_path: str | None = None
     """CloudDrive 虚拟路径 (POSIX, 如 /115open/云下载). ingest=clouddrive 时必填."""
+    content_type: ContentType | None = None
+    """刮削内容路由; 空则按文件名/番号推断."""
     recursive: bool = True
     patterns: list[str] = []
     move_mode: MoveMode = MoveMode.MOVE
@@ -52,6 +57,8 @@ class LibraryCreateRequest(BaseModel):
     fanart_template: PathTemplate | None = None
     extrafanart_template: PathTemplate | None = None
     nfo_template: PathTemplate | None = None
+    tvshow_nfo_template: PathTemplate | None = None
+    episode_nfo_template: PathTemplate | None = None
     trailer_template: PathTemplate | None = None
     subtitle_template: PathTemplate | None = None
     subtitle_extensions: SubtitleExtensions = Field(default_factory=lambda: list(DEFAULT_SUBTITLE_EXTENSIONS))
@@ -93,6 +100,7 @@ class LibraryResponse(BaseModel):
     auto_organize: bool
     ingest: LibraryIngest
     cloud_path: str | None = None
+    content_type: ContentType | None = None
     recursive: bool
     patterns: list[str] = []
     move_mode: MoveMode
@@ -105,6 +113,8 @@ class LibraryResponse(BaseModel):
     fanart_template: str | None = None
     extrafanart_template: str | None = None
     nfo_template: str | None = None
+    tvshow_nfo_template: str | None = None
+    episode_nfo_template: str | None = None
     trailer_template: str | None = None
     subtitle_template: str | None = None
     subtitle_extensions: list[str]
@@ -132,6 +142,8 @@ class OptionalPathTemplateDefaults(BaseModel):
     fanart_template: PathTemplate
     extrafanart_template: PathTemplate
     nfo_template: PathTemplate
+    tvshow_nfo_template: PathTemplate
+    episode_nfo_template: PathTemplate
     trailer_template: PathTemplate
     subtitle_template: PathTemplate
 
@@ -142,6 +154,8 @@ OPTIONAL_TEMPLATE_DEFAULTS = OptionalPathTemplateDefaults(
     fanart_template=FANART_TEMPLATE_DEFAULT,
     extrafanart_template=EXTRAFANART_TEMPLATE_DEFAULT,
     nfo_template=NFO_TEMPLATE_DEFAULT,
+    tvshow_nfo_template=TVSHOW_NFO_TEMPLATE_DEFAULT,
+    episode_nfo_template=EPISODE_NFO_TEMPLATE_DEFAULT,
     trailer_template=TRAILER_TEMPLATE_DEFAULT,
     subtitle_template=SUBTITLE_TEMPLATE_DEFAULT,
 )

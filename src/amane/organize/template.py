@@ -31,7 +31,7 @@ PATH_FIELD_ELLIPSIS = "…"
 _CLIP_KEYS = frozenset({"title", "actor", "actors", "actress", "actresses"})
 _ELLIPSIS_BYTES = len(PATH_FIELD_ELLIPSIS.encode("utf-8"))
 
-# cd? / sub? / mosaic? / def? 不是合法标识符, 只能用函数式 TypedDict.
+# cd? / season? / episode? / sub? / mosaic? / def? 不是合法标识符, 只能用函数式 TypedDict.
 TemplateVariables = TypedDict(
     "TemplateVariables",
     {
@@ -52,6 +52,8 @@ TemplateVariables = TypedDict(
         "raw_dir": str,
         "raw_name": str,
         "cd?": str,
+        "season?": str,
+        "episode?": str,
         "sub?": str,
         "content_type": str,
         "mosaic?": str,
@@ -320,6 +322,8 @@ def _build_variables(
     raw_name = source_path.stem if source_path else ""
     if cd is None and file_info is not None:
         cd = file_info.cd
+    season = file_info.season if file_info is not None else None
+    episode = file_info.episode if file_info is not None else None
     prefix, suffix = split_number(metadata.number) if metadata.number else ("", "")
 
     return {
@@ -340,6 +344,9 @@ def _build_variables(
         "raw_dir": raw_dir,
         "raw_name": raw_name,
         "cd?": str(cd) if cd is not None else "",
+        # 路径侧两位补零, 便于 Season 01 / S01E31 一类布局; 解析与 Episode 行仍存整型.
+        "season?": f"{season:02d}" if season is not None else "",
+        "episode?": f"{episode:02d}" if episode is not None else "",
         "sub?": "C" if file_info is not None and file_info.has_subtitle else "",
         "content_type": (
             str(file_info.content_type)

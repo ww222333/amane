@@ -41,6 +41,15 @@ def film_actors(names: Iterable[str], *, gender: ActorGender = ActorGender.FEMAL
     return [FilmActor(name=name, gender=gender) for name in names if name]
 
 
+class EpisodeInfo(BaseModel):
+    """插件 / 爬虫回传的单集信息. ``title`` / ``plot`` 可空."""
+
+    episode: int = Field(ge=1)
+    season: int = Field(default=1, ge=0)
+    title: str | None = None
+    plot: str | None = None
+
+
 class MediaMetadata(BaseModel):
     number: str
     title: str | None = None
@@ -61,6 +70,10 @@ class MediaMetadata(BaseModel):
     source_url: str | None = None
     directors: list[str] = Field(default_factory=list)
     extrafanart: list[str] = Field(default_factory=list)
+    #: 剧集总集数; 影片刮削可空.
+    episode_count: int | None = Field(default=None, ge=1)
+    #: 已知分集列表; 无单集标题时仍可只填 ``episode`` / ``season``.
+    episodes: list[EpisodeInfo] = Field(default_factory=list)
 
     @field_validator("actors", mode="before")
     @classmethod

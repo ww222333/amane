@@ -115,9 +115,10 @@ _DEFAULT_CONTENT_ROUTES: dict[ContentType, list[str]] = {
         str(SiteName.DMM),
         str(SiteName.JAVDB),
     ],
-    # 漫剧: 默认挂黄果 / JavDay 插件; 未安装时路由校验放行, 刮削跳过缺失来源.
+    # 漫剧: 默认挂黄果 API / 黄果短剧库 / JavDay; 未安装时路由校验放行, 刮削跳过缺失来源.
     ContentType.MANJU: [
         "mdcx.huangguoai",
+        "mdcx.huangguodrama",
         "mdcx.javday",
     ],
     ContentType.UNKNOWN: [],

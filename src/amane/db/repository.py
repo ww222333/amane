@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 class Repository(
     repos.AgentRepoMixin,
+    repos.EpisodesRepoMixin,
     repos.FacetsRepoMixin,
     repos.FeedsRepoMixin,
     repos.LibrariesRepoMixin,

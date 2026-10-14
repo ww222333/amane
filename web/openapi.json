@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Amane API",
-    "version": "1.0.18"
+    "version": "1.0.19"
   },
   "paths": {
     "/api/health": {
@@ -10151,6 +10151,16 @@
             ],
             "title": "Cloud Path"
           },
+          "content_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentType"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "recursive": {
             "type": "boolean",
             "title": "Recursive",
@@ -10426,6 +10436,16 @@
               }
             ],
             "title": "Cloud Path"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "recursive": {
             "type": "boolean",
@@ -10710,6 +10730,16 @@
               }
             ],
             "title": "Cloud Path"
+          },
+          "content_type": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContentType"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "recursive": {
             "anyOf": [

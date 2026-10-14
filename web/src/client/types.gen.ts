@@ -1966,6 +1966,7 @@ export type LibraryCreateRequest = {
      * Cloud Path
      */
     cloud_path?: string | null;
+    content_type?: ContentType | null;
     /**
      * Recursive
      */
@@ -2113,6 +2114,7 @@ export type LibraryResponse = {
      * Cloud Path
      */
     cloud_path?: string | null;
+    content_type?: ContentType | null;
     /**
      * Recursive
      */
@@ -2235,6 +2237,7 @@ export type LibraryUpdateRequest = {
      * Cloud Path
      */
     cloud_path?: string | null;
+    content_type?: ContentType | null;
     /**
      * Recursive
      */

@@ -3989,6 +3989,16 @@ export const LibraryCreateRequestSchema = {
             ],
             title: 'Cloud Path'
         },
+        content_type: {
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/ContentType'
+                },
+                {
+                    type: 'null'
+                }
+            ]
+        },
         recursive: {
             type: 'boolean',
             title: 'Recursive',
@@ -4267,6 +4277,16 @@ export const LibraryResponseSchema = {
                 }
             ],
             title: 'Cloud Path'
+        },
+        content_type: {
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/ContentType'
+                },
+                {
+                    type: 'null'
+                }
+            ]
         },
         recursive: {
             type: 'boolean',
@@ -4552,6 +4572,16 @@ export const LibraryUpdateRequestSchema = {
                 }
             ],
             title: 'Cloud Path'
+        },
+        content_type: {
+            anyOf: [
+                {
+                    $ref: '#/components/schemas/ContentType'
+                },
+                {
+                    type: 'null'
+                }
+            ]
         },
         recursive: {
             anyOf: [

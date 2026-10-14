@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.0.19
+
+### 新功能
+
+- **剧集分集表**: `Episode` 挂在 `Metadata` 下; 详情可对比来源并选用某站分集写入; 刮削收尾按文件名季集绑定 `MediaFile.episode_id`
+- **漫剧 NFO**: 库可分别配置剧级 / 分集 NFO 模板; 整理写 `<tvshow>` 与 `<episodedetails>`, 与影片 `<movie>` 分离
+- **季集占位符**: `{season?}` / `{episode?}` (路径两位补零); `{cd?}` 只表示多碟; 默认视频模板含 `[.S{season?}E{episode?}][-CD{cd?}]`
+- **库级刮削路由**: `Library.content_type` 指定后该库 SCRAPE 固定走此类型并锁定; 未指定仍按文件名 / 番号推断
+
 ## v1.0.18
 
 ### 新功能
